@@ -1,0 +1,404 @@
+<html>
+<meta charset="UTF-8">
+<head>
+	<link rel="stylesheet" href="css/bootstrap.min.css">
+	<link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+
+<div class="form-group">
+  <label for="aaa162Xslx">Choose the AAA-162 file to process</label>
+  <input type="file" id="aaa162Xslx" name="aaa162Xslx"/>
+</div>
+
+<div class="form-group">
+  <label for="dtmsPersReportXslx">Choose the DTMS personnel file</label>
+  <input type="file" id="dtmsPersReportXslx" name="dtmsPersReportXslx"/>
+</div>
+
+<div class="form-group">
+  <label for="dtmsTngReportXslx">Choose the DTMS training report to process</label>
+  <input type="file" id="dtmsTngReportXslx" name="dtmsTngReportXslx"/>
+</div>
+
+<div class="form-group">
+  <label for="dtmsTngToTrackXslx">Choose the DTMS training to track</label>
+  <input type="file" id="dtmsTngToTrackXslx" name="dtmsTngToTrackXslx"/>
+</div>
+<div class="form-group">
+
+	<button id="displayUnitSize" type="button" class="btn btn-primary btn-lg">Display Unit Size</button>
+
+	<button id="display350_1Compliance" type="button" class="btn btn-primary btn-lg">Display 350-1 Compliance</button>
+
+</div>
+
+<div class="chart"> </div> 
+<div class="tngComplianceChart"> </div> 
+<table id="complianceTable" class="table table-bordered" > </table> 
+
+<script src="js/jquery-3.4.1.min.js"></script>
+<script src="js/jquery.csv.min.js"></script>
+<script src="js/luxon.min.js"></script>
+<script src="js/jszip.js"></script>
+<script src="js/xlsx.js"></script>
+<script src="js/d3.v5.min.js"></script>
+
+<script>
+var DateTime = luxon.DateTime
+var aaa162List = []
+var dtmsTngReport = []
+var dtmsPersReport = []
+var dtmsTngToTrack = []
+var dtmsUnits = []
+var unitTngRecord = []
+
+// load the CSV to create the DA6
+$('#aaa162Xslx').on('change', function(event) {
+  var aaa162File = event.target.files[0]
+  var reader = new FileReader()
+  reader.onload = function (e) {
+		var data = e.target.result
+		var workbook = XLSX.read(data, {
+			type: 'binary'
+		})
+		workbook.SheetNames.forEach(function(sheetName) {
+			// iterate through the sheet rows until the ASGN/ATCH row is seen, then capture each row as a json object
+			// iterate until the string 'Total Number' is seen
+			// Here is your object
+			var obj = workbook.Sheets[sheetName]
+			var startRow = "A4"
+			var target
+			for (var prop in obj) {
+			  // look for the value that contains the string 'Total Number of ASG'
+				var value = ''
+				try {
+					if (obj[prop].v === undefined) {
+					  value = ''
+					} else if (Array.isArray(obj[prop])) {
+						value = ''
+					} else {
+						value = obj[prop].v.toString()
+					}
+				} catch (e) {
+					value = ''
+				}
+				try { 
+					value.includes("Total Number of ASG")
+				} catch (e) {
+					console.log("found error")
+				}
+			  if (value.includes("Total number of ASG")) {
+					target = 'FOUND'
+				}
+			}
+			var endRow =  ''
+			var XL_row_object = XLSX.utils.sheet_to_row_object_array(workbook.Sheets[sheetName]);
+			var json_object = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { range: "A4:M33" });
+			aaa162List.push(XL_row_object)
+			var json_object = JSON.stringify(XL_row_object)
+			console.log(json_object)
+		})
+  }
+	reader.onerror = function (ex) {
+		console.log(ex)
+	}
+  reader.readAsBinaryString(aaa162File)
+})
+
+// load the Xslx to create the dtmsPersReport
+$('#dtmsPersReportXslx').on('change', function(event) {
+  var dtmsPersReportFile = event.target.files[0]
+  var reader = new FileReader()
+  reader.onload = function (e) {
+		var data = e.target.result
+		var workbook = XLSX.read(data, {
+			type: 'binary'
+		})
+		workbook.SheetNames.forEach(function(sheetName) {
+			dtmsPersReport = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+		})
+		dtmsUnits = countUnitSize(dtmsPersReport)
+  }
+	reader.onerror = function (ex) {
+		console.log(ex)
+	}
+  reader.readAsBinaryString(dtmsPersReportFile)
+})
+
+// FUTURE - display a roster of the individuals on the team,
+// break down by Soldier and Civilian
+
+
+// load the Xslx to create the dtmsTngReport
+$('#dtmsTngReportXslx').on('change', function(event) {
+  var dtmsTngReportFile = event.target.files[0]
+  var reader = new FileReader()
+  reader.onload = function (e) {
+		var data = e.target.result
+		var workbook = XLSX.read(data, {
+			type: 'binary'
+		})
+		workbook.SheetNames.forEach(function(sheetName) {
+			dtmsTngReport = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+		})
+		addUnitToTngReport(dtmsTngReport, dtmsPersReport)
+		unitTngRecord = calcTngCompliance(dtmsTngReport)
+  }
+	reader.onerror = function (ex) {
+		console.log(ex)
+	}
+  reader.readAsBinaryString(dtmsTngReportFile)
+})
+
+
+// load the Xslx to create the dtmsTngToTrack - this is the list of trainings that we care about
+$('#dtmsTngToTrackXslx').on('change', function(event) {
+  var dtmsTngToTrackFile = event.target.files[0]
+  var reader = new FileReader()
+  reader.onload = function (e) {
+		var data = e.target.result
+		var workbook = XLSX.read(data, {
+			type: 'binary'
+		})
+		workbook.SheetNames.forEach(function(sheetName) {
+			dtmsTngToTrack = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+		})
+  }
+	reader.onerror = function (ex) {
+		console.log(ex)
+	}
+  reader.readAsBinaryString(dtmsTngToTrack)
+})
+
+// add the unitAssigned value to the training report data structure 
+function addUnitToTngReport (dtmsTngReport, dtmsPersReport) {
+	dtmsTngReport.forEach(function(record) {
+		dtmsPersReport.forEach(function(person) {
+	    if(record.LastName == person.LastName && record.Last4 == person.Last4) {
+				record['UnitAssigned'] = person['UnitAssigned']
+			}	
+		})
+	})
+}
+
+// build a data structure that contains the training data
+function calcTngCompliance (dtmsTngReport) {
+	// make acopy of the dtmsUnits array
+  unitTngRecord = [...dtmsUnits]
+	var allTngs = []
+	unitTngRecord.forEach(function(unitRecord) {
+		unitRecord['tngData'] = {}
+	})
+	// combine each person's record to one snapshot
+
+	// want to list the snapshot by unit by training
+	dtmsTngReport.forEach(function(record) {
+		let unit = record['UnitAssigned']
+		unitTngRecord.forEach(function(unitRecord) {
+		  if (unit == unitRecord['unit']) {
+				// the task doesn't exist for that unit, add it
+				if (!unitRecord['tngData'].hasOwnProperty(record.TaskNumber)) {
+					unitRecord['tngData'][record.TaskNumber] = []
+					unitRecord['tngData'][record.TaskNumber].push({ required: unitRecord.count, frequency: 365 })
+				}
+				unitRecord['tngData'][record.TaskNumber].push({ tng: record.TaskNumber, rank: record.RankShort, LastName: record.LastName, Last4: record.Last4, date: record.LastDateTrained })
+			}
+		})
+	})
+	return unitTngRecord
+}
+
+function countUnitSize (dtmsPersReport) {
+	// iterate through the dtmsPersReport and print out unique units with a count of how many are in the unit
+	dtmsPersReport.forEach(function(person) {
+	  if(unitExists(person['UnitAssigned'])) {
+			for (var i = 0; i < dtmsUnits.length; i++) {
+				if (dtmsUnits[i].unit == person['UnitAssigned']) {
+					dtmsUnits[i].count++
+				}
+			}
+		} else {
+			dtmsUnits.push({ unit: person['UnitAssigned'], count: 1 })
+		}
+	})
+	dtmsUnits = sortByUnit(dtmsUnits)
+	return dtmsUnits
+}
+
+
+// count the personnel by unit
+$('#displayUnitSize').on('click', function () {
+	var scale = d3.scaleLinear()
+		.domain([0,39])
+		.range([0,600])
+
+	d3.select(".chart")
+		.selectAll("div")
+		.data(dtmsUnits)
+			.enter()
+			.append("div")
+			.style("width", function(d) { return scale(d.count) + 'px' })
+			.text(function(d) { return d.unit + " Personnel: " + d.count })
+})
+
+// print out the unit's percent compliance with each of the trainings listed in the training to track file
+// make an easier way to view this information
+
+// create a data structure that contains the units required training along with the numbers that they should have
+
+// first sort the record
+// by team, by person
+$('#display350_1Compliance').on('click', function () {
+	var tngToTrack = ['150S-SHA-0100', 'DA-CMT01', 'DA-CMT02', 'DA-CMT10', 'DA-CMT12', 'DA-CMT16', 'DA-CMT18', 'DA-CMT19', 'HQDA ALARACT 163/2014 (EEO-203A NS)', 'HQDA ALARACT 163/2014 (EEO-203B S)', 'ARCYBER-02', 'ARCYBER-03', 'ARCYBER-04', 'ARCYBER-07', 'ARCYBER-20', 'ARCYBER-21', 'ARCYBER-22', 'ARCYBER-23']
+
+	generate350_1Table(unitTngRecord, tngToTrack)
+})
+
+
+// given an array of objects with property rank that contains the 'ShortRank' of the individual
+// count the number of records that have 'GS' in their short rank
+// we have GS-09 / GS-11 / GS-12 / GS-13 individuals
+function countDACivilians (trainedPersonnel) {
+	let dacCount = 0
+	for (const item of trainedPersonnel) {
+		if (item.rank.indexOf('GS') > 0) {
+			dacCount++
+		}
+	}	
+	return dacCount
+}
+
+function generate350_1Table (unitTngRecord, tngToTrack) {
+
+  var complianceTable = document.getElementById('complianceTable')
+  // remove the current table
+	while(complianceTable.hasChildNodes()) {
+		 complianceTable.removeChild(complianceTable.firstChild);
+	}
+
+	// setup the header, get the trainings that need to be displayed
+	
+	var headerRow = complianceTable.insertRow(-1)
+	var headerCell = headerRow.insertCell(-1)
+	for (var tng in tngToTrack) {
+		headerCell = headerRow.insertCell(-1)
+		headerCell.innerHTML = tngToTrack[tng]
+	}
+
+	for (var unit in unitTngRecord) {
+		var unitRow = complianceTable.insertRow(-1)
+		var unitCell = unitRow.insertCell(-1)
+		unitCell.innerHTML = unitTngRecord[unit]['unit']
+		for (var tng in tngToTrack) {
+			unitCell = unitRow.insertCell(-1)
+			//unitCell.innerHTML = tngToTrack[tng]
+			var cellId = 'complianceTableCell' + unit + tng
+			unitCell.id = cellId
+			var data = getUnitCompliance(tngToTrack[tng], unitTngRecord[unit]['unit'])
+			//var data = {compliant: 5, notCompliant: 10}
+			generateDonutChart(data, '#' + cellId)
+		}
+	}
+}
+
+function getUnitCompliance(tng, unit) {
+	// total the number of people that have completed the training, return an
+	// object { compliant: VALUE, notcompliant: VALUE }
+	var personRecords = []
+	var peopleInUnit = 0
+	for (var unitVal in unitTngRecord) {
+		if (unit == unitTngRecord[unitVal]['unit']) {
+			personRecords = unitTngRecord[unitVal]['tngData'][tng] || []
+			peopleInUnit = unitTngRecord[unitVal]['count']
+		}
+	}
+	// first sort the array by the date of the training to ensure that the most recent training is highest
+  // remove duplicates from the 'personReocrds' field
+  var dedupPersonRecords = []
+	const map = new Map()
+	for (const item of personRecords) {
+		if(!map.has(item.Last4)) {
+			map.set(item.Last4, true)
+			dedupPersonRecords.push({
+						LastName: item.LastName,
+						Last4: item.Last4
+			})
+		}
+	}
+	// need to make sure there are no duplicate records in the future
+	try {
+		var compliant = dedupPersonRecords.length
+	} catch (e) {
+		compliant = 0
+	}
+	return { compliant: compliant, notcompliant: peopleInUnit-compliant }
+}
+
+function sortByUnit (sort_file) {
+  // sort by the unit
+  sort_file.sort( function(a, b) {
+    return (a.unit.localeCompare(b.unit))
+  })
+  return sort_file
+}
+
+function unitExists(unitName) {
+  return dtmsUnits.some(function(el) {
+    return el.unit === unitName
+	})	
+}
+
+
+function generateDonutChart (data, divId)  {
+	var width = 100
+	var height = 100
+	var margin = 10
+
+	var radius = Math.min(width, height) / 2 - margin
+
+	var percent = Math.round(data.compliant * 100 / (data.compliant + data.notcompliant))
+	
+	//var svg = d3.select(".tngComplianceChart")
+	var svg = d3.select(divId)
+	.append("svg")
+		.attr("width", width)
+		.attr("height", height)
+	.append("g")
+		.attr("transform", "translate(" + width / 2 + "," + height / 2 + ")")
+
+	svg.append("text")
+		.attr("text-anchor", "middle")
+		.text(percent + '%')
+
+	// set the color scale
+	var color = d3.scaleOrdinal()
+		.domain(data)
+		.range(["#00b050", "#ff0000"])
+
+	// Compute the position of each group on the pie:
+	var pie = d3.pie()
+		.value(function(d) {return d.value; })
+	var data_ready = pie(d3.entries(data))
+
+
+	// Build the pie chart: Basically, each part of the pie is a path that we build using the arc function.
+	svg
+		.selectAll('whatever')
+		.data(data_ready)
+		.enter()
+		.append('path')
+		.attr('d', d3.arc()
+			.innerRadius(radius/2)
+			.outerRadius(radius)
+		)
+		.attr('fill', function(d){ return(color(d.data.key)) })
+		.attr("stroke", "black")
+		.style("stroke-width", "2px")
+		.style("opacity", 0.7)
+
+}
+
+</script>
+</body>
+</html>
