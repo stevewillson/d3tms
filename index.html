@@ -339,9 +339,13 @@ function showTngList (personRecords) {
     personNameCell.innerHTML = person.LastName
     if (person.TaskNumber !== undefined) { 
       personTngCell.innerHTML = person.TaskNumber
+    } else {
+      personTngCell.innerHTML = ''
     }
     if (person.LastDateTrained !== undefined) {
       personTngDateCell.innerHTML = person.LastDateTrained
+    } else {
+      personTngDateCell.innerHTML = ''
     }
   })
 }
