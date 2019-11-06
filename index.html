@@ -174,6 +174,12 @@ function processPersReport (dtmsPersReport) {
       for (var i = 0; i < dtmsUnits.length; i++) {
         if (dtmsUnits[i].unit == person['UnitAssigned']) {
           dtmsUnits[i].persCount++
+          if (person['RankShort'].indexOf('GS') >= 0) {
+            dtmsUnits[i].civilianCount++
+          }
+          if (person['RankShort'].indexOf('GS') == -1) {
+            dtmsUnits[i].soldierCount++
+          }
           unitRankArray = dtmsUnits[i]['rankArray']
           // add 1 to the rankCount for the person's rank
           for (let j = 0; j < unitRankArray.length; j++) {
@@ -186,12 +192,26 @@ function processPersReport (dtmsPersReport) {
     } else {
       //dtmsUnits.push({ unit: person['UnitAssigned'], persCount: 1, rank: [{ person[]: 1}] })
       let unitRankArray = rankArrayWithCount.map(a => ({...a}))
-      dtmsUnits.push(
-        { 
-          unit: person['UnitAssigned'], 
-          persCount: 1,
-          rankArray: unitRankArray
-        })
+      if (person['RankShort'].indexOf('GS') >= 0) {
+        dtmsUnits.push(
+          { 
+            unit: person['UnitAssigned'], 
+            persCount: 1,
+            soldierCount: 0,
+            civilianCount: 1,
+            rankArray: unitRankArray
+          })
+      }
+      if (person['RankShort'].indexOf('GS') == -1) {
+        dtmsUnits.push(
+          { 
+            unit: person['UnitAssigned'], 
+            persCount: 1,
+            soldierCount: 1,
+            civilianCount: 0,
+            rankArray: unitRankArray
+          })
+      }
       // add the person's rank that entered the array
       for (let j = 0; j < unitRankArray.length; j++) {
         if (unitRankArray[j]['rank'] === person['RankShort']) {
@@ -447,11 +467,23 @@ function getUnitCompliance(tng, unit, audience) {
 }
 
 function getSoldierCount (unit) {
-  return 25 
+  var soldierCount = 0
+  dtmsUnits.forEach(function(dtmsUnit) {
+    if (dtmsUnit['unit'] === unit) {
+      soldierCount = dtmsUnit['soldierCount']
+    }
+  })
+  return soldierCount
 }
 
 function getCivilianCount (unit) {
-  return 10
+  var civilianCount = 0
+  dtmsUnits.forEach(function(dtmsUnit) {
+    if (dtmsUnit['unit'] === unit) {
+      civilianCount = dtmsUnit['civilianCount']
+    }
+  })
+  return civilianCount
 }
 
 // sort by the date column descending (newest value on the top)
