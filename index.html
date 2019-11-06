@@ -96,6 +96,7 @@ $('#dtmsTngToTrackXslx').on('change', function(event) {
     var workbook = XLSX.read(data, {
       type: 'binary'
     })
+    // should be only 1 sheet for this document
     workbook.SheetNames.forEach(function(sheetName) {
       dtmsTngToTrack = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
     })
@@ -103,7 +104,7 @@ $('#dtmsTngToTrackXslx').on('change', function(event) {
   reader.onerror = function (ex) {
     console.log(ex)
   }
-  reader.readAsBinaryString(dtmsTngToTrack)
+  reader.readAsBinaryString(dtmsTngToTrackFile)
 })
 
 // add the unitAssigned value to the training report data structure 
@@ -232,9 +233,20 @@ $('#displayUnitSize').on('click', function () {
 // by team, by person
 $('#display350_1Compliance').on('click', function () {
 
-  var tngToTrack = ['150S-SHA-0100', 'DA-CMT01', 'DA-CMT02', 'DA-CMT10', 'DA-CMT12', 'DA-CMT16', 'DA-CMT18', 'DA-CMT19', 'HQDA ALARACT 163/2014 (EEO-203A NS)', 'HQDA ALARACT 163/2014 (EEO-203B S)', 'ARCYBER-02', 'ARCYBER-03', 'ARCYBER-04', 'ARCYBER-07', 'ARCYBER-20', 'ARCYBER-21', 'ARCYBER-22', 'ARCYBER-23']
+
+  var tngToTrack = []
+  dtmsTngToTrack.forEach(function(tngRow) {
+    tngToTrack.push(tngRow['TaskNumber'])
+  })
+
+  // TODO - if there is no 'tngToTrack'
+
+  //var tngToTrack = ['150S-SHA-0100', 'DA-CMT01', 'DA-CMT02', 'DA-CMT10', 'DA-CMT12', 'DA-CMT16', 'DA-CMT18', 'DA-CMT19', 'HQDA ALARACT 163/2014 (EEO-203A NS)', 'HQDA ALARACT 163/2014 (EEO-203B S)', 'ARCYBER-02', 'ARCYBER-03', 'ARCYBER-04', 'ARCYBER-07', 'ARCYBER-20', 'ARCYBER-21', 'ARCYBER-22', 'ARCYBER-23']
+
+  
   unitTngRecords = calcTngCompliance(dtmsTngReport)
-  generate350_1Table(unitTngRecords, tngToTrack)
+  //generate350_1Table(unitTngRecords, tngToTrack)
+  generate350_1Table(unitTngRecords, dtmsTngToTrack)
 })
 
 // given an array of objects with property rank that contains the 'ShortRank' of the individual
@@ -260,11 +272,15 @@ function generate350_1Table (unitTngRecords, tngToTrack) {
 
   // setup the header, get the trainings that need to be displayed
   
-  var headerRow = complianceTable.insertRow(-1)
-  var headerCell = headerRow.insertCell(-1)
+  var headerRowName = complianceTable.insertRow(-1)
+  var headerRowNumber = complianceTable.insertRow(-1)
+  var headerCellName = headerRowName.insertCell(-1)
+  var headerCellNumber = headerRowNumber.insertCell(-1)
   for (var tng in tngToTrack) {
-    headerCell = headerRow.insertCell(-1)
-    headerCell.innerHTML = tngToTrack[tng]
+    headerCellName = headerRowName.insertCell(-1)
+    headerCellName.innerHTML = tngToTrack[tng]['TaskName']
+    headerCellNumber = headerRowNumber.insertCell(-1)
+    headerCellNumber.innerHTML = tngToTrack[tng]['TaskNumber']
   }
 
   for (var unit in unitTngRecords) {
@@ -276,10 +292,10 @@ function generate350_1Table (unitTngRecords, tngToTrack) {
       //unitCell.innerHTML = tngToTrack[tng]
       var cellId = 'complianceTableCell' + unit + tng
       unitCell.id = cellId
-      var data = getUnitCompliance(tngToTrack[tng], unitTngRecords[unit]['unit'])
+      var data = getUnitCompliance(tngToTrack[tng]['TaskNumber'], unitTngRecords[unit]['unit'], tngToTrack[tng]['Audience'])
       // set the chart up here, 
       setCellCompliance(unitCell, data)
-      let tngVal = tngToTrack[tng]
+      let tngVal = tngToTrack[tng]['TaskNumber']
       let unitVal = unitTngRecords[unit]['unit']
       unitCell.onclick = (function(){genAndShowTngList(tngVal, unitVal)})
       //var data = {compliant: 5, noncompliant: 10}
@@ -356,18 +372,21 @@ function setCellCompliance (cell, values) {
   let compliant = parseInt(values.compliant)
   let total = parseInt(values.compliant) + parseInt(values.noncompliant)
   let compliance = Math.round(100 * compliant / total)
+  cell.innerHTML = compliance + '%<br>' + compliant + '/' + total
+
   if(compliance < 70) {
     cell.bgColor = 'red'
+    cell.style.color = 'white'
   } else if (compliance < 80) {
     cell.bgColor = 'yellow'
+    cell.style.color = 'black'
   } else {
     cell.bgColor = 'green'
+    cell.style.color = 'black'
   }
-  cell.innerHTML = compliance + '%<br>' + compliant + '/' + total
-  cell.style.color = 'black'
 }
 
-function getUnitCompliance(tng, unit) {
+function getUnitCompliance(tng, unit, audience) {
   // total the number of people that have completed the training, return an
   // object { compliant: VALUE, noncompliant: VALUE }
   var personRecords = []
@@ -397,11 +416,51 @@ function getUnitCompliance(tng, unit) {
   } catch (e) {
     compliant = 0
   }
-  let noncompliant = 0
-  if (peopleInUnit - compliant > 0) {
-    noncompliant = peopleInUnit - compliant
+  // 4 cases
+  // 1 - all -> just use 'peopleInUnit'
+  // 2 - Soldiers -> subtrack civilians from people in unit
+  // 3 - Civilians -> use the civilians number
+  // 4 - Supervisors -> hard code in '2' at this time
+
+  var required = peopleInUnit
+
+  if (audience === 'All') {
+    required = peopleInUnit
+  } else if (audience === 'Soldiers') {
+    var unitSoldierCount = getSoldierCount(unit)
+    required = unitSoldierCount
+  } else if (audience === 'Civilians') {
+    var unitCivilianCount = getCivilianCount(unit)
+    required = unitCivilianCount
+  } else if (audience === 'Supervisors') {
+    required = 2
+  } else {
+    required = peopleInUnit
   }
+
+  let noncompliant = 0
+  if (required - compliant > 0) {
+    noncompliant = required - compliant
+  }
+  // TODO - check to make sure that those that are required to take a training are the ones that completed it
   return { compliant: compliant, noncompliant: noncompliant }
+}
+
+function getSoldierCount (unit) {
+  return 25 
+}
+
+function getCivilianCount (unit) {
+  return 10
+}
+
+// sort by the date column descending (newest value on the top)
+function sortByDateDesc (sort_file) {
+  // sort by the unit
+  sort_file.sort( function(a, b) {
+    return (a.unit.localeCompare(b.unit))
+  })
+  return sort_file
 }
 
 function sortByUnit (sort_file) {
