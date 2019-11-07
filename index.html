@@ -78,7 +78,23 @@ $('#dtmsTngReportXslx').on('change', function(event) {
     workbook.SheetNames.forEach(function(sheetName) {
       dtmsTngReport = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
     })
-    dtmsTngReport = addUnitToTngReport(dtmsTngReport, dtmsPersReport)
+    // sort by date trained and remove duplicate person entries from the tng report
+    // only interested in the latest date trained
+
+    dtmsTngReport.forEach(function(tngRecord) {
+      dateData = tngRecord['LastDateTrained'].split('/')
+      tngDate = new DateTime.utc(parseInt('20' + dateData[2]), parseInt(dateData[0]), parseInt(dateData[1]))
+      tngRecord['parsedLastDateTrained'] = tngDate
+    })
+
+    // sort the training by the date completed
+    dtmsTngReportSorted = sortByDateDesc(dtmsTngReport)
+
+    // deduplicate the training records by person and tasknumber
+    dtmsTngReportSortedDedup = dedupTngRecords(dtmsTngReportSorted)
+
+    // add the unit to the training for showing unit compliance
+    dtmsTngReport = addUnitToTngReport(dtmsTngReportSortedDedup, dtmsPersReport)
   }
   reader.onerror = function (ex) {
     console.log(ex)
@@ -136,8 +152,6 @@ function calcTngCompliance (dtmsTngReport) {
         // the task doesn't exist for that unit, add it
         if (!unitRecord['tngData'].hasOwnProperty(record.TaskNumber)) {
           unitRecord['tngData'][record.TaskNumber] = []
-          // do not add this extra record now, other ways will be used to document the frequency of the training
-          //unitRecord['tngData'][record.TaskNumber].push({ required: unitRecord.count, frequency: 365 })
         }
         // convert the date to a luxon date
         // LastDateTrained is in format 'M/D/YY'
@@ -235,9 +249,6 @@ $('#displayUnitSize').on('click', function () {
 // print out the unit's percent compliance with each of the trainings listed in the training to track file
 // make an easier way to view this information
 
-// create a data structure that contains the units required training along with the numbers that they should have
-
-// first sort the record
 // by team, by person
 $('#display350_1Compliance').on('click', function () {
   // calculate the training compliance for the dtmsTngReport
@@ -286,21 +297,38 @@ function generate350_1Table (unitTngRecords, dtmsTngToTrack) {
 function generateTngList (tng, unit) {
   // iterate through and display who is compliant and who is not compliant with that training
   let personRecords = []
+  let tngRecords = []
+  let personTngRecords = []
 
+  // make an array of the 'personRecords' that apply to this unit
   dtmsPersReport.forEach(function(personRecord) {
+    // build an array of all the people assigned
     if (personRecord['UnitAssigned'] === unit) {
       personRecords.push(personRecord)
     }
   })
-  dtmsTngReport.forEach(function(record) {
-    personRecords.forEach(function(person) {
-      if (record['TaskNumber'] === tng && record['Last4'] === person['Last4'] && record['LastName'] === person['LastName']) {
+  // make an array of the 'tngRecords' that apply to this training
+  dtmsTngReport.forEach(function(tngRecord) {
+    if (tngRecord['TaskNumber'] === tng) {
+      tngRecords.push(tngRecord)
+    }
+  })
+
+  // make a copy of the objects for the personTngRecords array
+  personTngRecords = personRecords.map(a => ({...a}))
+
+  personTngRecords.forEach(function(person) {
+    tngRecords.forEach(function(record) {
+      // all records have the 'TaskNumber' of tng that we are interested in, just look to place the correct values by the person's name
+      // while looping through each tngRecord, check to see if the person's name and last4 are in that record
+      // if yes, then add the training to the 'personTngRecords' array
+      if (record['Last4'] === person['Last4'] && record['LastName'] === person['LastName']) {
         person['LastDateTrained'] = record['LastDateTrained']
         person['TaskNumber'] = record['TaskNumber']
       }
     })
   })
-  return personRecords
+  return personTngRecords
 }
 
 function genAndShowTngList(tng, unit) {
@@ -374,8 +402,6 @@ function getUnitCompliance(tng, unit, audience) {
       peopleInUnit = unitRecord['persCount']
     }
   })
-  // TODO first sort the array by the date of the training to ensure that the most recent training is highest
-  // remove duplicates from the 'personReocrds' field
   var dedupPersonRecords = []
   const map = new Map()
   for (const item of personRecords) {
@@ -447,9 +473,34 @@ function getCivilianCount (unit) {
 function sortByDateDesc (sort_file) {
   // sort by the unit
   sort_file.sort( function(a, b) {
-    return (a.unit.localeCompare(b.unit))
+    if (a.parsedLastDateTrained.valueOf() > b.parsedLastDateTrained.valueOf()) { 
+      return -1
+    } else if (a.parsedLastDateTrained.valueOf() < b.parsedLastDateTrained.valueOf()) { 
+      return 1 
+    } else {
+      return 0
+    }
   })
   return sort_file
+}
+
+function dedupTngRecords (tngRecords) {
+  // iterate through the array of records, add the records to the 'dedupRecords' object and return an array of unique records
+  // uniqueify by LastName, Last4, TaskNumber
+  let dedupTngRecords = []
+
+  // make an array that holds our values of interest, we will concatenate the LastName, Last4, and TaskNumber to make our 'flat array' and check against that array to see
+  // if the value already exists in that array
+  let dedupCheckArray = []
+
+  tngRecords.forEach(function(tngRecord) {
+    // if the dedupCheckArray doesn't contain the entry, it is the first time that it has been seen! unique
+    if (dedupCheckArray.indexOf((tngRecord['LastName'] + tngRecord['Last4'] + tngRecord['TaskNumber'])) == -1) {
+      dedupCheckArray.push(tngRecord['LastName'] + tngRecord['Last4'] + tngRecord['TaskNumber'])
+      dedupTngRecords.push(tngRecord)
+    }
+  })
+  return dedupTngRecords
 }
 
 function sortByUnit (sort_file) {
