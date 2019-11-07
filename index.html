@@ -46,7 +46,7 @@ var dtmsTngToTrack = []
 var dtmsUnits = []
 var unitTngRecords = []
 
-// load the Xslx to create the dtmsPersReport
+// load the Xslx to create the dtmsPersReport, this is the personnel report from DTMS and contains information about unit personnel
 $('#dtmsPersReportXslx').on('change', function(event) {
   var dtmsPersReportFile = event.target.files[0]
   var reader = new FileReader()
@@ -66,7 +66,7 @@ $('#dtmsPersReportXslx').on('change', function(event) {
   reader.readAsBinaryString(dtmsPersReportFile)
 })
 
-// load the Xslx to create the dtmsTngReport
+// load the Xslx to create the dtmsTngReport array, this file contains personnel training records
 $('#dtmsTngReportXslx').on('change', function(event) {
   var dtmsTngReportFile = event.target.files[0]
   var reader = new FileReader()
@@ -86,8 +86,7 @@ $('#dtmsTngReportXslx').on('change', function(event) {
   reader.readAsBinaryString(dtmsTngReportFile)
 })
 
-
-// load the Xslx to create the dtmsTngToTrack - this is the list of trainings that we care about
+// load the Xslx to create the dtmsTngToTrack - this is the list of trainings that will be displayed in the chart
 $('#dtmsTngToTrackXslx').on('change', function(event) {
   var dtmsTngToTrackFile = event.target.files[0]
   var reader = new FileReader()
@@ -137,9 +136,14 @@ function calcTngCompliance (dtmsTngReport) {
         // the task doesn't exist for that unit, add it
         if (!unitRecord['tngData'].hasOwnProperty(record.TaskNumber)) {
           unitRecord['tngData'][record.TaskNumber] = []
-          unitRecord['tngData'][record.TaskNumber].push({ required: unitRecord.count, frequency: 365 })
+          // do not add this extra record now, other ways will be used to document the frequency of the training
+          //unitRecord['tngData'][record.TaskNumber].push({ required: unitRecord.count, frequency: 365 })
         }
-        unitRecord['tngData'][record.TaskNumber].push({ tng: record.TaskNumber, rank: record.RankShort, LastName: record.LastName, Last4: record.Last4, date: record.LastDateTrained })
+        // convert the date to a luxon date
+        // LastDateTrained is in format 'M/D/YY'
+        dateData = record['LastDateTrained'].split('/')
+        tngDate = new DateTime.utc(parseInt('20' + dateData[2]), parseInt(dateData[0]), parseInt(dateData[1]))
+        unitRecord['tngData'][record.TaskNumber].push({ tng: record.TaskNumber, rank: record.RankShort, LastName: record.LastName, Last4: record.Last4, tngDate: tngDate })
       }
     })
   })
@@ -152,6 +156,8 @@ function processPersReport (dtmsPersReport) {
   //  { 
   //    unit: UNIT_NAME,
   //    persCount: number,
+  //    soldierCount: number,
+  //    civilianCount: number,
   //    rankArray: [ {rank: count}, {rank: count}... ]
   //  }
   // iterate through the dtmsPersReport and print out unique units with a count of how many are in the unit
@@ -163,67 +169,51 @@ function processPersReport (dtmsPersReport) {
       rankArray.push(person['RankShort'])
     }
   })
-
   let rankArrayWithCount = []
   rankArray.forEach(function(rankVal) {
     rankArrayWithCount.push({ rank: rankVal, rankCount: 0 })
   })
-
   dtmsPersReport.forEach(function(person) {
-    if(unitExists(person['UnitAssigned'])) {
-      for (var i = 0; i < dtmsUnits.length; i++) {
-        if (dtmsUnits[i].unit == person['UnitAssigned']) {
-          dtmsUnits[i].persCount++
-          if (person['RankShort'].indexOf('GS') >= 0) {
-            dtmsUnits[i].civilianCount++
-          }
-          if (person['RankShort'].indexOf('GS') == -1) {
-            dtmsUnits[i].soldierCount++
-          }
-          unitRankArray = dtmsUnits[i]['rankArray']
-          // add 1 to the rankCount for the person's rank
-          for (let j = 0; j < unitRankArray.length; j++) {
-            if (unitRankArray[j]['rank'] === person['RankShort']) {
-              unitRankArray[j]['rankCount']++
-            }
-          }
-        }
-      }
-    } else {
-      //dtmsUnits.push({ unit: person['UnitAssigned'], persCount: 1, rank: [{ person[]: 1}] })
+    // if the unit doesn't exist in the array, add it with empty numbers
+    if(!unitExists(person['UnitAssigned'])) {
       let unitRankArray = rankArrayWithCount.map(a => ({...a}))
-      if (person['RankShort'].indexOf('GS') >= 0) {
-        dtmsUnits.push(
-          { 
-            unit: person['UnitAssigned'], 
-            persCount: 1,
-            soldierCount: 0,
-            civilianCount: 1,
-            rankArray: unitRankArray
-          })
-      }
-      if (person['RankShort'].indexOf('GS') == -1) {
-        dtmsUnits.push(
-          { 
-            unit: person['UnitAssigned'], 
-            persCount: 1,
-            soldierCount: 1,
-            civilianCount: 0,
-            rankArray: unitRankArray
-          })
-      }
-      // add the person's rank that entered the array
-      for (let j = 0; j < unitRankArray.length; j++) {
-        if (unitRankArray[j]['rank'] === person['RankShort']) {
-          unitRankArray[j]['rankCount']++
+      dtmsUnits.push(
+        { 
+          unit: person['UnitAssigned'], 
+          persCount: 0,
+          soldierCount: 0,
+          civilianCount: 0,
+          rankArray: unitRankArray
+        })
+    } 
+    dtmsUnits.forEach(function(dtmsUnit) {
+      // if the person's UnitAssigned matches the current unit
+      // increment the persCount
+      // check if they're a Soldier or Civilian, increment the count accordingly
+      if (dtmsUnit['unit'] == person['UnitAssigned']) {
+        dtmsUnit.persCount++
+        // if there is a 'GS' in the person's rank, they are a civilian
+        if (person['RankShort'].indexOf('GS') >= 0) {
+          dtmsUnit.civilianCount++
+        }
+        // if there is no 'GS' in the person's rank, they are a soldier
+        if (person['RankShort'].indexOf('GS') == -1) {
+          dtmsUnit.soldierCount++
+        }
+        unitRankArray = dtmsUnit['rankArray']
+        // add 1 to the rankCount for the person's rank
+        for (let j = 0; j < unitRankArray.length; j++) {
+          if (unitRankArray[j]['rank'] === person['RankShort']) {
+            unitRankArray[j]['rankCount']++
+          }
         }
       }
-    }
+    })
   })
+  // sort the units by name alphabetically
   dtmsUnits = sortByUnit(dtmsUnits)
   return dtmsUnits
 }
-
 
 // count the personnel by unit
 $('#displayUnitSize').on('click', function () {
@@ -242,8 +232,6 @@ $('#displayUnitSize').on('click', function () {
 
 // TODO - print out unit personnel
 
-
-
 // print out the unit's percent compliance with each of the trainings listed in the training to track file
 // make an easier way to view this information
 
@@ -252,38 +240,15 @@ $('#displayUnitSize').on('click', function () {
 // first sort the record
 // by team, by person
 $('#display350_1Compliance').on('click', function () {
-
-
-  var tngToTrack = []
-  dtmsTngToTrack.forEach(function(tngRow) {
-    tngToTrack.push(tngRow['TaskNumber'])
-  })
-
-  // TODO - if there is no 'tngToTrack'
-
-  //var tngToTrack = ['150S-SHA-0100', 'DA-CMT01', 'DA-CMT02', 'DA-CMT10', 'DA-CMT12', 'DA-CMT16', 'DA-CMT18', 'DA-CMT19', 'HQDA ALARACT 163/2014 (EEO-203A NS)', 'HQDA ALARACT 163/2014 (EEO-203B S)', 'ARCYBER-02', 'ARCYBER-03', 'ARCYBER-04', 'ARCYBER-07', 'ARCYBER-20', 'ARCYBER-21', 'ARCYBER-22', 'ARCYBER-23']
-
-  
+  // calculate the training compliance for the dtmsTngReport
+  // unitTngRecords contains the trainign data broken down by unit
   unitTngRecords = calcTngCompliance(dtmsTngReport)
-  //generate350_1Table(unitTngRecords, tngToTrack)
+
+  // this function will build the html table to show the training data
   generate350_1Table(unitTngRecords, dtmsTngToTrack)
 })
 
-// given an array of objects with property rank that contains the 'ShortRank' of the individual
-// count the number of records that have 'GS' in their short rank
-// we have GS-09 / GS-11 / GS-12 / GS-13 individuals
-function countDACivilians (trainedPersonnel) {
-  let dacCount = 0
-  for (const item of trainedPersonnel) {
-    if (item.rank.indexOf('GS') > 0) {
-      dacCount++
-    }
-  }  
-  return dacCount
-}
-
-function generate350_1Table (unitTngRecords, tngToTrack) {
-
+function generate350_1Table (unitTngRecords, dtmsTngToTrack) {
   var complianceTable = document.getElementById('complianceTable')
   // remove the current table
   while(complianceTable.hasChildNodes()) {
@@ -291,37 +256,31 @@ function generate350_1Table (unitTngRecords, tngToTrack) {
   }
 
   // setup the header, get the trainings that need to be displayed
-  
   var headerRowName = complianceTable.insertRow(-1)
   var headerRowNumber = complianceTable.insertRow(-1)
   var headerCellName = headerRowName.insertCell(-1)
   var headerCellNumber = headerRowNumber.insertCell(-1)
-  for (var tng in tngToTrack) {
+  dtmsTngToTrack.forEach(function(tngEntry) {
     headerCellName = headerRowName.insertCell(-1)
-    headerCellName.innerHTML = tngToTrack[tng]['TaskName']
+    headerCellName.innerHTML = tngEntry['TaskName']
     headerCellNumber = headerRowNumber.insertCell(-1)
-    headerCellNumber.innerHTML = tngToTrack[tng]['TaskNumber']
-  }
+    headerCellNumber.innerHTML = tngEntry['TaskNumber']
+  })
 
-  for (var unit in unitTngRecords) {
+  unitTngRecords.forEach(function(unitRecord) {
     var unitRow = complianceTable.insertRow(-1)
     var unitCell = unitRow.insertCell(-1)
-    unitCell.innerHTML = unitTngRecords[unit]['unit']
-    for (var tng in tngToTrack) {
+    unitCell.innerHTML = unitRecord['unit']
+    dtmsTngToTrack.forEach(function(tngEntry) {
       unitCell = unitRow.insertCell(-1)
-      //unitCell.innerHTML = tngToTrack[tng]
-      var cellId = 'complianceTableCell' + unit + tng
-      unitCell.id = cellId
-      var data = getUnitCompliance(tngToTrack[tng]['TaskNumber'], unitTngRecords[unit]['unit'], tngToTrack[tng]['Audience'])
-      // set the chart up here, 
+      let data = getUnitCompliance(tngEntry['TaskNumber'], unitRecord['unit'], tngEntry['Audience'])
+      // set the chart up here
       setCellCompliance(unitCell, data)
-      let tngVal = tngToTrack[tng]['TaskNumber']
-      let unitVal = unitTngRecords[unit]['unit']
-      unitCell.onclick = (function(){genAndShowTngList(tngVal, unitVal)})
-      //var data = {compliant: 5, noncompliant: 10}
-      //generateDonutChart(data, '#' + cellId)
-    }
-  }
+      unitCell.onclick = (function() { 
+        genAndShowTngList(tngEntry['TaskNumber'], unitRecord['unit']) 
+      })
+    })
+  })
 }
 
 function generateTngList (tng, unit) {
@@ -386,8 +345,6 @@ function showTngList (personRecords) {
   })
 }
 
-
-
 function setCellCompliance (cell, values) {
   let compliant = parseInt(values.compliant)
   let total = parseInt(values.compliant) + parseInt(values.noncompliant)
@@ -411,12 +368,12 @@ function getUnitCompliance(tng, unit, audience) {
   // object { compliant: VALUE, noncompliant: VALUE }
   var personRecords = []
   var peopleInUnit = 0
-  for (var unitVal in unitTngRecords) {
-    if (unit == unitTngRecords[unitVal]['unit']) {
-      personRecords = unitTngRecords[unitVal]['tngData'][tng] || []
-      peopleInUnit = unitTngRecords[unitVal]['persCount']
+  unitTngRecords.forEach(function(unitRecord) {
+    if (unit === unitRecord['unit']) {
+      personRecords = unitRecord['tngData'][tng] || []
+      peopleInUnit = unitRecord['persCount']
     }
-  }
+  })
   // TODO first sort the array by the date of the training to ensure that the most recent training is highest
   // remove duplicates from the 'personReocrds' field
   var dedupPersonRecords = []
@@ -508,57 +465,6 @@ function unitExists(unitName) {
     return el.unit === unitName
   })  
 }
-
-
-function generateDonutChart (data, divId)  {
-  var width = 100
-  var height = 100
-  var margin = 10
-
-  var radius = Math.min(width, height) / 2 - margin
-
-  var percent = Math.round(data.compliant * 100 / (data.compliant + data.noncompliant))
-  
-  //var svg = d3.select(".tngComplianceChart")
-  var svg = d3.select(divId)
-  .append("svg")
-    .attr("width", width)
-    .attr("height", height)
-  .append("g")
-    .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")")
-
-  svg.append("text")
-    .attr("text-anchor", "middle")
-    .text(percent + '%')
-
-  // set the color scale
-  var color = d3.scaleOrdinal()
-    .domain(data)
-    .range(["#00b050", "#ff0000"])
-
-  // Compute the position of each group on the pie:
-  var pie = d3.pie()
-    .value(function(d) {return d.value; })
-  var data_ready = pie(d3.entries(data))
-
-
-  // Build the pie chart: Basically, each part of the pie is a path that we build using the arc function.
-  svg
-    .selectAll('whatever')
-    .data(data_ready)
-    .enter()
-    .append('path')
-    .attr('d', d3.arc()
-      .innerRadius(radius/2)
-      .outerRadius(radius)
-    )
-    .attr('fill', function(d){ return(color(d.data.key)) })
-    .attr("stroke", "black")
-    .style("stroke-width", "2px")
-    .style("opacity", 0.7)
-
-}
-
 </script>
 </body>
 </html>
