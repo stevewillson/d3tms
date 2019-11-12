@@ -44,9 +44,9 @@ var dtmsPersReport = []
 var dtmsTngReport = []
 var dtmsTngToTrack = []
 var dtmsUnits = []
-var unitTngRecords = []
 
-// load the Xslx to create the dtmsPersReport, this is the personnel report from DTMS and contains information about unit personnel
+// create the dtmsPersReport from the Xslx file
+// this is the personnel report from DTMS
 $('#dtmsPersReportXslx').on('change', function(event) {
   var dtmsPersReportFile = event.target.files[0]
   var reader = new FileReader()
@@ -55,9 +55,8 @@ $('#dtmsPersReportXslx').on('change', function(event) {
     var workbook = XLSX.read(data, {
       type: 'binary'
     })
-    workbook.SheetNames.forEach(function(sheetName) {
-      dtmsPersReport = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-    })
+    dtmsPersReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
     dtmsUnits = processPersReport(dtmsPersReport)
   }
   reader.onerror = function (ex) {
@@ -66,7 +65,8 @@ $('#dtmsPersReportXslx').on('change', function(event) {
   reader.readAsBinaryString(dtmsPersReportFile)
 })
 
-// load the Xslx to create the dtmsTngReport array, this file contains personnel training records
+// create the dtmsTngReport from the Xslx file
+// this contains personnel training records
 $('#dtmsTngReportXslx').on('change', function(event) {
   var dtmsTngReportFile = event.target.files[0]
   var reader = new FileReader()
@@ -75,9 +75,7 @@ $('#dtmsTngReportXslx').on('change', function(event) {
     var workbook = XLSX.read(data, {
       type: 'binary'
     })
-    workbook.SheetNames.forEach(function(sheetName) {
-      dtmsTngReport = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-    })
+    dtmsTngReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
     // sort by date trained and remove duplicate person entries from the tng report
     // only interested in the latest date trained
 
@@ -88,10 +86,10 @@ $('#dtmsTngReportXslx').on('change', function(event) {
     })
 
     // sort the training by the date completed
-    dtmsTngReportSorted = sortByDateDesc(dtmsTngReport)
+    let dtmsTngReportSorted = sortByDateDesc(dtmsTngReport)
 
     // deduplicate the training records by person and tasknumber
-    dtmsTngReportSortedDedup = dedupTngRecords(dtmsTngReportSorted)
+    let dtmsTngReportSortedDedup = dedupTngRecords(dtmsTngReportSorted)
 
     // add the unit to the training for showing unit compliance
     dtmsTngReport = addUnitToTngReport(dtmsTngReportSortedDedup, dtmsPersReport)
@@ -104,17 +102,14 @@ $('#dtmsTngReportXslx').on('change', function(event) {
 
 // load the Xslx to create the dtmsTngToTrack - this is the list of trainings that will be displayed in the chart
 $('#dtmsTngToTrackXslx').on('change', function(event) {
-  var dtmsTngToTrackFile = event.target.files[0]
-  var reader = new FileReader()
+  let dtmsTngToTrackFile = event.target.files[0]
+  let reader = new FileReader()
   reader.onload = function (e) {
-    var data = e.target.result
-    var workbook = XLSX.read(data, {
+    let data = e.target.result
+    let workbook = XLSX.read(data, {
       type: 'binary'
     })
-    // should be only 1 sheet for this document
-    workbook.SheetNames.forEach(function(sheetName) {
-      dtmsTngToTrack = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-    })
+    dtmsTngToTrack = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
   }
   reader.onerror = function (ex) {
     console.log(ex)
@@ -135,11 +130,8 @@ function addUnitToTngReport (dtmsTngReport, dtmsPersReport) {
 }
 
 // build a data structure that contains the training data
-function calcTngCompliance (dtmsTngReport) {
-  // make acopy of the dtmsUnits array, this makes a shallow copy
-  unitTngRecords = [...dtmsUnits]
-  var allTngs = []
-  unitTngRecords.forEach(function(unitRecord) {
+function calcTngCompliance (dtmsUnits, dtmsTngReport) {
+  dtmsUnits.forEach(function(unitRecord) {
     unitRecord['tngData'] = {}
   })
   // combine each person's record to one snapshot
@@ -147,7 +139,7 @@ function calcTngCompliance (dtmsTngReport) {
   // want to list the snapshot by unit by training
   dtmsTngReport.forEach(function(record) {
     let unit = record['UnitAssigned']
-    unitTngRecords.forEach(function(unitRecord) {
+    dtmsUnits.forEach(function(unitRecord) {
       if (unit == unitRecord['unit']) {
         // the task doesn't exist for that unit, add it
         if (!unitRecord['tngData'].hasOwnProperty(record.TaskNumber)) {
@@ -161,7 +153,7 @@ function calcTngCompliance (dtmsTngReport) {
       }
     })
   })
-  return unitTngRecords
+  return dtmsUnits
 }
 
 function processPersReport (dtmsPersReport) {
@@ -204,7 +196,7 @@ function processPersReport (dtmsPersReport) {
       // if the person's UnitAssigned matches the current unit
       // increment the persCount
       // check if they're a Soldier or Civilian, increment the count accordingly
-      if (dtmsUnit['unit'] == person['UnitAssigned']) {
+      if (dtmsUnit['unit'] === person['UnitAssigned']) {
         dtmsUnit.persCount++
         // if there is a 'GS' in the person's rank, they are a civilian
         if (person['RankShort'].indexOf('GS') >= 0) {
@@ -227,6 +219,18 @@ function processPersReport (dtmsPersReport) {
   // sort the units by name alphabetically
   dtmsUnits = sortByUnit(dtmsUnits)
   return dtmsUnits
+}
+
+function getUnitKeyValue(unit, key) {
+  // for the dtmsUnits data structure, return the value for the key 'key' for the unit 'unit'
+  let retValue = ''
+  dtmsUnits.forEach(function(dtmsUnit) {
+    if (dtmsUnit['unit'] === unit) {
+      retValue = dtmsUnit[key]
+      return retValue
+    }
+  })
+  return retValue
 }
 
 // count the personnel by unit
@@ -252,14 +256,16 @@ $('#displayUnitSize').on('click', function () {
 // by team, by person
 $('#display350_1Compliance').on('click', function () {
   // calculate the training compliance for the dtmsTngReport
-  // unitTngRecords contains the trainign data broken down by unit
-  unitTngRecords = calcTngCompliance(dtmsTngReport)
+  // dtmsUnits contains the trainign data broken down by unit
+  dtmsUnits = calcTngCompliance(dtmsUnits, dtmsTngReport)
 
   // this function will build the html table to show the training data
-  generate350_1Table(unitTngRecords, dtmsTngToTrack)
+  generate350_1Table(dtmsUnits, dtmsTngToTrack)
 })
 
-function generate350_1Table (unitTngRecords, dtmsTngToTrack) {
+// replace the unit TngRecords with the dtmsUnits
+
+function generate350_1Table (dtmsUnits, dtmsTngToTrack) {
   var complianceTable = document.getElementById('complianceTable')
   // remove the current table
   while(complianceTable.hasChildNodes()) {
@@ -271,6 +277,8 @@ function generate350_1Table (unitTngRecords, dtmsTngToTrack) {
   var headerRowNumber = complianceTable.insertRow(-1)
   var headerCellName = headerRowName.insertCell(-1)
   var headerCellNumber = headerRowNumber.insertCell(-1)
+  headerCellName.innerHTML = 'Task Name'
+  headerCellNumber.innerHTML = 'Task Number'
   dtmsTngToTrack.forEach(function(tngEntry) {
     headerCellName = headerRowName.insertCell(-1)
     headerCellName.innerHTML = tngEntry['TaskName']
@@ -278,10 +286,13 @@ function generate350_1Table (unitTngRecords, dtmsTngToTrack) {
     headerCellNumber.innerHTML = tngEntry['TaskNumber']
   })
 
-  unitTngRecords.forEach(function(unitRecord) {
+  dtmsUnits.forEach(function(unitRecord) {
     var unitRow = complianceTable.insertRow(-1)
     var unitCell = unitRow.insertCell(-1)
     unitCell.innerHTML = unitRecord['unit']
+    unitCell.onclick = (function() { 
+      displayPersonnelCompliance(unitRecord['unit']) 
+    })
     dtmsTngToTrack.forEach(function(tngEntry) {
       unitCell = unitRow.insertCell(-1)
       let data = getUnitCompliance(tngEntry['TaskNumber'], unitRecord['unit'], tngEntry['Audience'])
@@ -325,6 +336,7 @@ function generateTngList (tng, unit) {
       if (record['Last4'] === person['Last4'] && record['LastName'] === person['LastName']) {
         person['LastDateTrained'] = record['LastDateTrained']
         person['TaskNumber'] = record['TaskNumber']
+        person['parsedLastDateTrained'] = record['parsedLastDateTrained']
       }
     })
   })
@@ -338,7 +350,7 @@ function genAndShowTngList(tng, unit) {
 
 
 function showTngList (personRecords) {
-  var personTable = document.getElementById('personTable')
+  let personTable = document.getElementById('personTable')
   // remove the current table
   while(personTable.hasChildNodes()) {
      personTable.removeChild(personTable.firstChild);
@@ -349,7 +361,7 @@ function showTngList (personRecords) {
   let nameHeaderCell = headerRow.insertCell(-1)
   nameHeaderCell.innerHTML = 'Name'
   let tngHeaderCell = headerRow.insertCell(-1)
-  tngHeaderCell.innerHTML = 'Training'
+  tngHeaderCell.innerHTML = 'Task Number'
   let tngDateHeaderCell = headerRow.insertCell(-1)
   tngDateHeaderCell.innerHTML = 'Date Trained'
   personRecords.forEach(function(person) {
@@ -396,12 +408,9 @@ function getUnitCompliance(tng, unit, audience) {
   // object { compliant: VALUE, noncompliant: VALUE }
   var personRecords = []
   var peopleInUnit = 0
-  unitTngRecords.forEach(function(unitRecord) {
-    if (unit === unitRecord['unit']) {
-      personRecords = unitRecord['tngData'][tng] || []
-      peopleInUnit = unitRecord['persCount']
-    }
-  })
+  peopleInUnit = getUnitKeyValue(unit, 'persCount')
+  personRecords = getUnitKeyValue(unit, 'tngData')[tng] || []
+  // remove duplicate records
   var dedupPersonRecords = []
   const map = new Map()
   for (const item of personRecords) {
@@ -413,7 +422,6 @@ function getUnitCompliance(tng, unit, audience) {
       })
     }
   }
-  // need to make sure there are no duplicate records in the future
   try {
     var compliant = dedupPersonRecords.length
   } catch (e) {
@@ -430,10 +438,10 @@ function getUnitCompliance(tng, unit, audience) {
   if (audience === 'All') {
     required = peopleInUnit
   } else if (audience === 'Soldiers') {
-    var unitSoldierCount = getSoldierCount(unit)
+    var unitSoldierCount = getUnitKeyValue(unit, 'soldierCount')
     required = unitSoldierCount
   } else if (audience === 'Civilians') {
-    var unitCivilianCount = getCivilianCount(unit)
+    var unitCivilianCount = getUnitKeyValue(unit, 'civilianCount')
     required = unitCivilianCount
   } else if (audience === 'Supervisors') {
     required = 2
@@ -449,39 +457,62 @@ function getUnitCompliance(tng, unit, audience) {
   return { compliant: compliant, noncompliant: noncompliant }
 }
 
-function getSoldierCount (unit) {
-  var soldierCount = 0
-  dtmsUnits.forEach(function(dtmsUnit) {
-    if (dtmsUnit['unit'] === unit) {
-      soldierCount = dtmsUnit['soldierCount']
+function displayPersonnelCompliance (unit) {
+  // given a unit, display the people in that unit and when they completed the tracked training, display 'red' background if they do not have a training record
+  // loop through all the personnel
+  let personTable = document.getElementById('personTable')
+  // remove the current table
+  while(personTable.hasChildNodes()) {
+     personTable.removeChild(personTable.firstChild);
+  }
+  // setup the header, get the trainings that need to be displayed
+  let headerRowName = personTable.insertRow(-1)
+  let headerRowNumber = personTable.insertRow(-1)
+  let headerCellName = headerRowName.insertCell(-1)
+  let headerCellNumber = headerRowNumber.insertCell(-1)
+  headerCellName.innerHTML = 'Task Name'
+  headerCellNumber.innerHTML = 'Task Number'
+  dtmsTngToTrack.forEach(function(tngEntry) {
+    headerCellName = headerRowName.insertCell(-1)
+    headerCellName.innerHTML = tngEntry['TaskName']
+    headerCellNumber = headerRowNumber.insertCell(-1)
+    headerCellNumber.innerHTML = tngEntry['TaskNumber']
+  })
+  dtmsPersReport.forEach(function(person) {
+    if (person['UnitAssigned'] === unit) {
+      displayPersonTraining(person)
     }
   })
-  return soldierCount
 }
 
-function getCivilianCount (unit) {
-  var civilianCount = 0
-  dtmsUnits.forEach(function(dtmsUnit) {
-    if (dtmsUnit['unit'] === unit) {
-      civilianCount = dtmsUnit['civilianCount']
-    }
-  })
-  return civilianCount
-}
+function displayPersonTraining (person) {
+  let personTable = document.getElementById('personTable')
 
-// sort by the date column descending (newest value on the top)
-function sortByDateDesc (sort_file) {
-  // sort by the unit
-  sort_file.sort( function(a, b) {
-    if (a.parsedLastDateTrained.valueOf() > b.parsedLastDateTrained.valueOf()) { 
-      return -1
-    } else if (a.parsedLastDateTrained.valueOf() < b.parsedLastDateTrained.valueOf()) { 
-      return 1 
-    } else {
-      return 0
-    }
+  let persHeaderRow = personTable.insertRow(-1)
+  let persHeaderCell = persHeaderRow.insertCell(-1)
+  let dateData = ''
+  persHeaderCell.innerHTML = person['LastName']
+  dtmsTngToTrack.forEach(function(tngToTrack) {
+    personCell = persHeaderRow.insertCell(-1)
+    dtmsTngReport.forEach(function(tngRecord) {
+      // also check to see if the person's name matches
+      if(tngToTrack['TaskNumber'] === tngRecord['TaskNumber'] && person['Last4'] === tngRecord['Last4'] && person['LastName'] === tngRecord['LastName']) {
+        // parse the date and then show the box 
+        // green - good to go
+        // yellow - will expire in the next 30 days
+        // red - expired or no record found
+        dateData = tngRecord['LastDateTrained'].split('/')
+        tngDate = new DateTime.utc(parseInt('20' + dateData[2]), parseInt(dateData[0]), parseInt(dateData[1]))
+        //let tngRecord['parsedLastDateTrained'] = tngDate
+        personCell.innerHTML = tngRecord['LastDateTrained']
+
+        //// compare the dates
+        //if(DateTime().valueOf() > tngDate.plus({ year: 1 }).valueOf()) {
+          //persComplianceCell.bgColor = 'red'
+        //}
+      }
+    })
   })
-  return sort_file
 }
 
 function dedupTngRecords (tngRecords) {
@@ -501,6 +532,24 @@ function dedupTngRecords (tngRecords) {
     }
   })
   return dedupTngRecords
+}
+
+
+// SORT FUNCTIONS 
+
+// sort by the date column descending (newest value on the top)
+function sortByDateDesc (sort_file) {
+  // sort by the unit
+  sort_file.sort( function(a, b) {
+    if (a.parsedLastDateTrained.valueOf() > b.parsedLastDateTrained.valueOf()) { 
+      return -1
+    } else if (a.parsedLastDateTrained.valueOf() < b.parsedLastDateTrained.valueOf()) { 
+      return 1 
+    } else {
+      return 0
+    }
+  })
+  return sort_file
 }
 
 function sortByUnit (sort_file) {
