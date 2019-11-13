@@ -37,6 +37,8 @@
 <script src="js/jszip.js"></script>
 <script src="js/xlsx.js"></script>
 <script src="js/d3.v5.min.js"></script>
+<script src="js/jquery.tablesorter.min.js"></script>
+
 
 <script>
 var DateTime = luxon.DateTime
@@ -233,6 +235,18 @@ function getUnitKeyValue(unit, key) {
   return retValue
 }
 
+function getTngToTrackKeyValue(taskNumber, key) {
+  // for the dtmsTngToTrack data structure, return the value for the key 'key' for the training 'taskNumber'
+  let retValue = ''
+  dtmsTngToTrack.forEach(function(training) {
+    if (training['TaskNumber'] === taskNumber) {
+      retValue = training[key]
+      return retValue
+    }
+  })
+  return retValue
+}
+
 // count the personnel by unit
 $('#displayUnitSize').on('click', function () {
   var scale = d3.scaleLinear()
@@ -261,6 +275,8 @@ $('#display350_1Compliance').on('click', function () {
 
   // this function will build the html table to show the training data
   generate350_1Table(dtmsUnits, dtmsTngToTrack)
+  $("#complianceTable").tablesorter()
+
 })
 
 // replace the unit TngRecords with the dtmsUnits
@@ -273,8 +289,9 @@ function generate350_1Table (dtmsUnits, dtmsTngToTrack) {
   }
 
   // setup the header, get the trainings that need to be displayed
-  var headerRowName = complianceTable.insertRow(-1)
-  var headerRowNumber = complianceTable.insertRow(-1)
+  var header = complianceTable.createTHead()
+  var headerRowName = header.insertRow(-1)
+  var headerRowNumber = header.insertRow(-1)
   var headerCellName = headerRowName.insertCell(-1)
   var headerCellNumber = headerRowNumber.insertCell(-1)
   headerCellName.innerHTML = 'Task Name'
@@ -290,19 +307,36 @@ function generate350_1Table (dtmsUnits, dtmsTngToTrack) {
     var unitRow = complianceTable.insertRow(-1)
     var unitCell = unitRow.insertCell(-1)
     unitCell.innerHTML = unitRecord['unit']
-    unitCell.onclick = (function() { 
-      displayPersonnelCompliance(unitRecord['unit']) 
-    })
+    unitCell.setAttribute('data-unit',unitRecord['unit'])
+    unitCell.onclick = unitListClickHandler
+    //unitCell.onclick = (function() { 
+      //displayPersonnelCompliance(unitRecord['unit']) 
+    //})
     dtmsTngToTrack.forEach(function(tngEntry) {
       unitCell = unitRow.insertCell(-1)
       let data = getUnitCompliance(tngEntry['TaskNumber'], unitRecord['unit'], tngEntry['Audience'])
       // set the chart up here
       setCellCompliance(unitCell, data)
-      unitCell.onclick = (function() { 
-        genAndShowTngList(tngEntry['TaskNumber'], unitRecord['unit']) 
-      })
+      unitCell.setAttribute('data-unit',unitRecord['unit'])
+      unitCell.setAttribute('data-tng',tngEntry['TaskNumber'])
+      unitCell.onclick = tngListClickHandler
     })
   })
+}
+
+function unitListClickHandler (e) {
+  let unit = e.srcElement.getAttribute('data-unit')
+  e.srcElement.bgColor = 'orange'
+  e.srcElement.style.color = 'black'
+  displayPersonnelCompliance(unit)
+}
+
+function tngListClickHandler (e) {
+  let unit = e.srcElement.getAttribute('data-unit')
+  let tng = e.srcElement.getAttribute('data-tng')
+  e.srcElement.bgColor = 'orange'
+  e.srcElement.style.color = 'black'
+  genAndShowTngList(tng, unit)
 }
 
 function generateTngList (tng, unit) {
@@ -355,7 +389,8 @@ function showTngList (personRecords) {
   while(personTable.hasChildNodes()) {
      personTable.removeChild(personTable.firstChild);
   }
-  let headerRow = personTable.insertRow(-1)
+  let header = personTable.createTHead()
+  let headerRow = header.insertRow(-1)
   let rankHeaderCell = headerRow.insertCell(-1)
   rankHeaderCell.innerHTML = 'Rank'
   let nameHeaderCell = headerRow.insertCell(-1)
@@ -390,7 +425,6 @@ function setCellCompliance (cell, values) {
   let total = parseInt(values.compliant) + parseInt(values.noncompliant)
   let compliance = Math.round(100 * compliant / total)
   cell.innerHTML = compliance + '%<br>' + compliant + '/' + total
-
   if(compliance < 70) {
     cell.bgColor = 'red'
     cell.style.color = 'white'
@@ -466,8 +500,9 @@ function displayPersonnelCompliance (unit) {
      personTable.removeChild(personTable.firstChild);
   }
   // setup the header, get the trainings that need to be displayed
-  let headerRowName = personTable.insertRow(-1)
-  let headerRowNumber = personTable.insertRow(-1)
+  let header = personTable.createTHead()
+  let headerRowName = header.insertRow(-1)
+  let headerRowNumber = header.insertRow(-1)
   let headerCellName = headerRowName.insertCell(-1)
   let headerCellNumber = headerRowNumber.insertCell(-1)
   headerCellName.innerHTML = 'Task Name'
@@ -501,17 +536,28 @@ function displayPersonTraining (person) {
         // green - good to go
         // yellow - will expire in the next 30 days
         // red - expired or no record found
-        dateData = tngRecord['LastDateTrained'].split('/')
-        tngDate = new DateTime.utc(parseInt('20' + dateData[2]), parseInt(dateData[0]), parseInt(dateData[1]))
-        //let tngRecord['parsedLastDateTrained'] = tngDate
-        personCell.innerHTML = tngRecord['LastDateTrained']
-
-        //// compare the dates
-        //if(DateTime().valueOf() > tngDate.plus({ year: 1 }).valueOf()) {
-          //persComplianceCell.bgColor = 'red'
-        //}
+        let tngDate = tngRecord['parsedLastDateTrained']
+        let curDate = new DateTime.local()
+        let expDate = tngDate.plus({ days: parseInt(tngToTrack['Frequency']) })
+        let tngDuration = expDate.diff(curDate, 'days')
+        personCell.innerHTML = tngDate.toFormat('MM/dd/yyyy') 
+        personCell.innerHTML += ' (' + Math.round(tngDuration.get('days')) + ')'
+        if (tngDuration.get('days') > 30) {
+        // tng is valid for more than 30 days, bg should be green
+          personCell.bgColor = 'green'
+          personCell.style.color = 'black'
+        } else if (tngDuration.get('days') > 0) {
+          personCell.bgColor = 'yellow'
+          personCell.style.color = 'black'
+        } else {
+          personCell.bgColor = 'red'
+          personCell.style.color = 'white'
+        }
       }
     })
+    if (personCell.innerHTML === '') {
+      personCell.bgColor = 'red'
+    }
   })
 }
 
