@@ -40,13 +40,11 @@
 <script src="js/d3.v5.min.js"></script>
 <script src="js/jquery.tablesorter.min.js"></script>
 
-
 <script>
 var DateTime = luxon.DateTime
 var dtmsPersReport = []
 var dtmsTngReport = []
 var dtmsTngToTrack = []
-var dtmsUnits = []
 
 // create the dtmsPersReport from the Xslx file
 // this is the personnel report from DTMS
@@ -59,8 +57,6 @@ $('#dtmsPersReportXslx').on('change', function(event) {
       type: 'binary'
     })
     dtmsPersReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-
-    dtmsUnits = processPersReport(dtmsPersReport)
   }
   reader.onerror = function (ex) {
     console.log(ex)
@@ -76,7 +72,8 @@ $('#dtmsTngReportXslx').on('change', function(event) {
   reader.onload = function (e) {
     var data = e.target.result
     var workbook = XLSX.read(data, {
-      type: 'binary'
+      type: 'binary',
+      cellDates: true, 
     })
     dtmsTngReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
     // sort by date trained and remove duplicate person entries from the tng report
@@ -87,13 +84,10 @@ $('#dtmsTngReportXslx').on('change', function(event) {
     })
 
     // sort the training by the date completed
-    let dtmsTngReportSorted = sortByDateDesc(dtmsTngReport)
+    dtmsTngReport = sortByDateDesc(dtmsTngReport)
 
     // deduplicate the training records by person and tasknumber
-    let dtmsTngReportSortedDedup = dtmsTngReportSorted.filter(dedupTngRecords, Object.create(null))
-
-    // add the unit to the training for showing unit compliance
-    dtmsTngReport = addUnitToTngReport(dtmsTngReportSortedDedup, dtmsPersReport)
+    dtmsTngReport = dtmsTngReport.filter(dedupTngRecords, Object.create(null))
   }
   reader.onerror = function (ex) {
     console.log(ex)
@@ -130,151 +124,39 @@ function addUnitToTngReport (dtmsTngReport, dtmsPersReport) {
   return dtmsTngReport
 }
 
-// build a data structure that contains the training data
-function calcTngCompliance (dtmsUnits, dtmsTngReport) {
-  dtmsUnits.forEach(function(unitRecord) {
-    unitRecord['tngData'] = {}
-  })
-  // combine each person's record to one snapshot
-
-  // want to list the snapshot by unit by training
-  dtmsTngReport.forEach(function(record) {
-    let unit = record['UnitAssigned']
-    dtmsUnits.forEach(function(unitRecord) {
-      if (unit == unitRecord['unit']) {
-        // the task doesn't exist for that unit, add it
-        if (!unitRecord['tngData'].hasOwnProperty(record.TaskNumber)) {
-          unitRecord['tngData'][record.TaskNumber] = []
-        }
-        // convert the date to a luxon date
-        // LastDateTrained is in format 'M/D/YY'
-        tngDate = DateTime.fromJSDate(record['LastDateTrained'])
-        //tngDate = new DateTime.utc(parseInt('20' + dateData[2]), parseInt(dateData[0]), parseInt(dateData[1]))
-        unitRecord['tngData'][record.TaskNumber].push({ tng: record.TaskNumber, rank: record.RankShort, LastName: record.LastName, Last4: record.Last4, tngDate: tngDate })
-      }
-    })
-  })
-  return dtmsUnits
-}
-
-function processPersReport (dtmsPersReport) {
-  // count the unit size, also break down how many people by rank are in each unit
-  // unitPersStats
-  //  { 
-  //    unit: UNIT_NAME,
-  //    persCount: number,
-  //    soldierCount: number,
-  //    civilianCount: number,
-  //    rankArray: [ {rank: count}, {rank: count}... ]
-  //  }
-  // iterate through the dtmsPersReport and print out unique units with a count of how many are in the unit
-
-  // do two passes through the dtmsPersReport, on the first pass, get an array of all the different ranks inside the report
-  let rankArray = []
-  dtmsPersReport.forEach(function(person) {
-    if(!rankArray.includes(person['RankShort'])) {
-      rankArray.push(person['RankShort'])
-    }
-  })
-  let rankArrayWithCount = []
-  rankArray.forEach(function(rankVal) {
-    rankArrayWithCount.push({ rank: rankVal, rankCount: 0 })
-  })
-  dtmsPersReport.forEach(function(person) {
-    // if the unit doesn't exist in the array, add it with empty numbers
-    if(!unitExists(person['UnitAssigned'])) {
-      let unitRankArray = rankArrayWithCount.map(a => ({...a}))
-      dtmsUnits.push(
-        { 
-          unit: person['UnitAssigned'], 
-          persCount: 0,
-          soldierCount: 0,
-          civilianCount: 0,
-          rankArray: unitRankArray
-        })
-    } 
-    dtmsUnits.forEach(function(dtmsUnit) {
-      // if the person's UnitAssigned matches the current unit
-      // increment the persCount
-      // check if they're a Soldier or Civilian, increment the count accordingly
-      if (dtmsUnit['unit'] === person['UnitAssigned']) {
-        dtmsUnit.persCount++
-        // if there is a 'GS' in the person's rank, they are a civilian
-        if (person['RankShort'].indexOf('GS') >= 0) {
-          dtmsUnit.civilianCount++
-        }
-        // if there is no 'GS' in the person's rank, they are a soldier
-        if (person['RankShort'].indexOf('GS') == -1) {
-          dtmsUnit.soldierCount++
-        }
-        unitRankArray = dtmsUnit['rankArray']
-        // add 1 to the rankCount for the person's rank
-        for (let j = 0; j < unitRankArray.length; j++) {
-          if (unitRankArray[j]['rank'] === person['RankShort']) {
-            unitRankArray[j]['rankCount']++
-          }
-        }
-      }
-    })
-  })
-  // sort the units by name alphabetically
-  dtmsUnits = dtmsUnits.sort()
-  //dtmsUnits = sortByUnit(dtmsUnits)
-  return dtmsUnits
-}
-
-function getUnitKeyValue(unit, key) {
-  // for the dtmsUnits data structure, return the value for the key 'key' for the unit 'unit'
-  let retValue = ''
-  dtmsUnits.forEach(function(dtmsUnit) {
-    if (dtmsUnit['unit'] === unit) {
-      retValue = dtmsUnit[key]
-      return retValue
-    }
-  })
-  return retValue
-}
-
-function getTngToTrackKeyValue(taskNumber, key) {
-  // for the dtmsTngToTrack data structure, return the value for the key 'key' for the training 'taskNumber'
-  let retValue = ''
-  dtmsTngToTrack.forEach(function(training) {
-    if (training['TaskNumber'] === taskNumber) {
-      retValue = training[key]
-      return retValue
-    }
-  })
-  return retValue
+function genLastNameLast4Keys (keyArray, persRecord) {
+  keyArray.push(persRecord['LastName'] + '|' + persRecord['Last4'])
+  return keyArray
 }
 
 // count the personnel by unit
 $('#displayUnitSize').on('click', function () {
+  let dtmsUnitArray = dtmsPersReport.map(getUnits)
+    .reduce(getUniqueValues,[])
+    .sort()
+  let unitSize = []
+  let persList = []
+  dtmsUnitArray.forEach(function (unit) {
+    persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
+    unitSize.push({ unit: unit, persCount: persList.length }) 
+  })
   var scale = d3.scaleLinear()
     .domain([0,39])
     .range([0,600])
 
   d3.select(".chart")
     .selectAll("div")
-    .data(dtmsUnits)
+    .data(unitSize)
       .enter()
       .append("div")
       .style("width", function(d) { return scale(d.persCount) + 'px' })
       .text(function(d) { return d.unit + " Personnel: " + d.persCount })
 })
 
-// TODO - print out unit personnel
-
-// print out the unit's percent compliance with each of the trainings listed in the training to track file
-// make an easier way to view this information
-
-// by team, by person
 $('#display350_1Compliance').on('click', function () {
-  // calculate the training compliance for the dtmsTngReport
-  // dtmsUnits contains the trainign data broken down by unit
-  dtmsUnits = calcTngCompliance(dtmsUnits, dtmsTngReport)
+  // build the html table to show the training data
+  generate350_1Table()
 
-  // this function will build the html table to show the training data
-  generate350_1Table(dtmsUnits, dtmsTngToTrack)
   $("#complianceTable").tablesorter({
     theme: 'bootstrap',
     sortReset: true,
@@ -283,9 +165,7 @@ $('#display350_1Compliance').on('click', function () {
   $("#complianceTable").trigger("updateAll")
 })
 
-// replace the unit TngRecords with the dtmsUnits
-
-function generate350_1Table (dtmsUnits, dtmsTngToTrack) {
+function generate350_1Table () {
   var complianceTable = document.getElementById('complianceTable')
 
   // remove the current table
@@ -310,7 +190,6 @@ function generate350_1Table (dtmsUnits, dtmsTngToTrack) {
 
   complianceTableBody = document.createElement('tbody')
 
-  // map then reduce, first map to only show either UnitAttached or UnitAssigned
   // reduce to only include unique values
   let dtmsUnitArray = dtmsPersReport.map(getUnits)
     .reduce(getUniqueValues,[])
@@ -326,11 +205,59 @@ function generate350_1Table (dtmsUnits, dtmsTngToTrack) {
     unitCell.setAttribute('data-unit',unit)
     unitCell.onclick = unitListClickHandler
 
+    // iterate through the tracked trainings training entries
     dtmsTngToTrack.forEach(function(tngEntry) {
+
       unitCell = unitRow.insertCell(-1)
-      let data = getUnitCompliance(tngEntry['TaskNumber'], unit, tngEntry['Audience'])
+      // get the people for that unit that should complete the training
+      let persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
+      let persNum = persList.length
+      let soldierNum = persList.filter(getSoldiers).length
+      let daCivNum = persList.filter(getDACivilians).length
+
+      // get the training records for the soldiers in the unit for this training
+      let persKeyArray = persList.reduce(genLastNameLast4Keys,[])
+      let tngCompleted = dtmsTngReport.filter(getTngForList,{ persKeyArray: persKeyArray, TaskNumber: tngEntry['TaskNumber'] })
+      let dayValue = luxon.DateTime.local()
+      let nonExpiredTngCompleted = tngCompleted.filter(checkTngValid,{ frequency: tngEntry['Frequency'], dayValue: dayValue })
+
+      let soldiersCompleted = nonExpiredTngCompleted.filter(getSoldiers).length
+      let daCivsCompleted = nonExpiredTngCompleted.filter(getDACivilians).length
+      let supervisorsCompleted = nonExpiredTngCompleted.filter(getSupervisors).length
+
+      let audience = tngEntry['Audience']
+      let required = 0
+      let complete = 0
+      if (audience === 'All') {
+        required = persNum
+        complete = nonExpiredTngCompleted.length
+      } else if (audience === 'Soldiers') {
+        required = soldierNum
+        complete = soldiersCompleted
+      } else if (audience === 'Civilians') {
+        required = daCivNum
+        complete = daCivsCompleted
+      } else if (audience === 'Supervisors') {
+        required = persList.filter(getSupervisors).length
+        complete = supervisorsCompleted
+      } else {
+        required = persNum
+        complete = tngCompleted.length
+      }
+
       // set the chart up here
-      setCellCompliance(unitCell, data)
+      let compliance = Math.round(100 * complete / required)
+      unitCell.innerHTML = compliance + '%<br>' + complete + '/' + required
+      if(compliance < 70) {
+        unitCell.bgColor = 'red'
+        unitCell.style.color = 'white'
+      } else if (compliance < 80) {
+        unitCell.bgColor = 'yellow'
+        unitCell.style.color = 'black'
+      } else {
+        unitCell.bgColor = 'green'
+        unitCell.style.color = 'black'
+      }
       unitCell.setAttribute('data-unit',unit)
       unitCell.setAttribute('data-tng',tngEntry['TaskNumber'])
       unitCell.onclick = tngListClickHandler
@@ -351,55 +278,19 @@ function tngListClickHandler (e) {
   let tng = e.srcElement.getAttribute('data-tng')
   e.srcElement.bgColor = 'orange'
   e.srcElement.style.color = 'black'
-  genAndShowTngList(tng, unit)
+  showTngList(tng, unit)
 }
 
-function generateTngList (tng, unit) {
-  // iterate through and display who is compliant and who is not compliant with that training
-  let personRecords = []
-  let tngRecords = []
-  let personTngRecords = []
+function showTngList (tng, unit) {
+  // retrieve records for a unit for a tng
+  let personRecords = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
 
-  // make an array of the 'personRecords' that apply to this unit
-  dtmsPersReport.forEach(function(personRecord) {
-    // build an array of all the people assigned
-    if (personRecord['UnitAssigned'] === unit) {
-      personRecords.push(personRecord)
-    }
-  })
-  // make an array of the 'tngRecords' that apply to this training
-  dtmsTngReport.forEach(function(tngRecord) {
-    if (tngRecord['TaskNumber'] === tng) {
-      tngRecords.push(tngRecord)
-    }
-  })
+  let tngToTrackRecord = dtmsTngToTrack.filter(getTngToTrackRecord,{ tng: tng })
+  let frequency = tngToTrackRecord[0]['Frequency']
+  let dayValue = luxon.DateTime.local()
 
-  // make a copy of the objects for the personTngRecords array
-  personTngRecords = personRecords.map(a => ({...a}))
-
-  personTngRecords.forEach(function(person) {
-    tngRecords.forEach(function(record) {
-      // all records have the 'TaskNumber' of tng that we are interested in, just look to place the correct values by the person's name
-      // while looping through each tngRecord, check to see if the person's name and last4 are in that record
-      // if yes, then add the training to the 'personTngRecords' array
-      if (record['Last4'] === person['Last4'] && record['LastName'] === person['LastName']) {
-        person['LastDateTrained'] = record['LastDateTrained']
-        person['TaskNumber'] = record['TaskNumber']
-        person['parsedLastDateTrained'] = record['parsedLastDateTrained']
-      }
-    })
-  })
-  return personTngRecords
-}
-
-function genAndShowTngList(tng, unit) {
-  let personRecords = generateTngList(tng, unit)
-  showTngList(personRecords)
-}
-
-
-function showTngList (personRecords) {
   let personTable = document.getElementById('personTable')
+
   // remove the current table
   while(personTable.hasChildNodes()) {
      personTable.removeChild(personTable.firstChild);
@@ -416,6 +307,10 @@ function showTngList (personRecords) {
   tngDateHeaderCell.innerHTML = 'Date Trained'
   let personTableBody = document.createElement('tbody')
   personRecords.forEach(function(person) {
+
+    let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tng
+    completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash })
+
     let personRow = personTableBody.insertRow(-1)
     let personRankCell = personRow.insertCell(-1)
     let personNameCell = personRow.insertCell(-1)
@@ -423,107 +318,48 @@ function showTngList (personRecords) {
     let personTngDateCell = personRow.insertCell(-1)
     personRankCell.innerHTML = person.RankShort
     personNameCell.innerHTML = person.LastName
-    if (person.TaskNumber !== undefined) { 
-      personTngCell.innerHTML = person.TaskNumber
-    } else {
-      personTngCell.innerHTML = ''
-    }
-    if (person.LastDateTrained !== undefined) {
-      personTngDateCell.innerHTML = person.LastDateTrained
+    if (completedTngRecord.length > 0) {
+      personTngCell.innerHTML = completedTngRecord[0].TaskNumber
+      personTngDateCell.innerHTML = completedTngRecord[0].parsedLastDateTrained.toFormat('MM/dd/yyyy')
+      if (completedTngRecord[0].parsedLastDateTrained.plus({ days: frequency }) < dayValue) {
+        personRow.bgColor = 'red'
+        personRow.style.color = 'white'
+      }
     } else {
       personTngDateCell.innerHTML = ''
+      personTngCell.innerHTML = ''
     }
   })
   personTable.appendChild(personTableBody)
-}
 
-function setCellCompliance (cell, values) {
-  let compliant = parseInt(values.compliant)
-  let total = parseInt(values.compliant) + parseInt(values.noncompliant)
-  let compliance = Math.round(100 * compliant / total)
-  cell.innerHTML = compliance + '%<br>' + compliant + '/' + total
-  if(compliance < 70) {
-    cell.bgColor = 'red'
-    cell.style.color = 'white'
-  } else if (compliance < 80) {
-    cell.bgColor = 'yellow'
-    cell.style.color = 'black'
-  } else {
-    cell.bgColor = 'green'
-    cell.style.color = 'black'
-  }
-}
-
-function getUnitCompliance(tng, unit, audience) {
-  // total the number of people that have completed the training, return an
-  // object { compliant: VALUE, noncompliant: VALUE }
-  var personRecords = []
-
-
-  var peopleInUnit = 0
-  peopleInUnit = dtmsPersReport.filter(getUnitSoldierList,{ unit: unit }).length
-  personRecords = getUnitKeyValue(unit, 'tngData')[tng] || []
-  // remove duplicate records
-  var dedupPersonRecords = []
-  const map = new Map()
-  for (const item of personRecords) {
-    if(!map.has(item.Last4)) {
-      map.set(item.Last4, true)
-      dedupPersonRecords.push({
-            LastName: item.LastName,
-            Last4: item.Last4
-      })
-    }
-  }
-  try {
-    var compliant = dedupPersonRecords.length
-  } catch (e) {
-    compliant = 0
-  }
-  // 4 cases
-  // 1 - all -> just use 'peopleInUnit'
-  // 2 - Soldiers -> subtrack civilians from people in unit
-  // 3 - Civilians -> use the civilians number
-  // 4 - Supervisors -> hard code in '2' at this time
-
-  var required = peopleInUnit
-
-  if (audience === 'All') {
-    required = peopleInUnit
-  } else if (audience === 'Soldiers') {
-    var unitSoldierCount = getUnitKeyValue(unit, 'soldierCount')
-    required = unitSoldierCount
-  } else if (audience === 'Civilians') {
-    var unitCivilianCount = getUnitKeyValue(unit, 'civilianCount')
-    required = unitCivilianCount
-  } else if (audience === 'Supervisors') {
-    required = 2
-  } else {
-    required = peopleInUnit
-  }
-
-  let noncompliant = 0
-  if (required - compliant > 0) {
-    noncompliant = required - compliant
-  }
-  // TODO - check to make sure that those that are required to take a training are the ones that completed it
-  return { compliant: compliant, noncompliant: noncompliant }
+  $("#personTable").tablesorter({
+    theme: 'bootstrap',
+    sortReset: true,
+    sortRestart: true,
+  })
+  $("#personTable").trigger("updateAll")
 }
 
 function displayPersonnelCompliance (unit) {
-  // given a unit, display the people in that unit and when they completed the tracked training, display 'red' background if they do not have a training record
+  
   // loop through all the personnel
   let personTable = document.getElementById('personTable')
   // remove the current table
   while(personTable.hasChildNodes()) {
      personTable.removeChild(personTable.firstChild);
   }
+
+  // given a unit, display the people in that unit and when they completed the tracked training, display 'red' background if they do not have a training record
+  let persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
+
   // setup the header, get the trainings that need to be displayed
   let header = personTable.createTHead()
   let headerRowName = header.insertRow(-1)
   let headerRowNumber = header.insertRow(-1)
   let headerCellName = headerRowName.insertCell(-1)
   let headerCellNumber = headerRowNumber.insertCell(-1)
+  headerCellName = headerRowName.insertCell(-1)
+  headerCellNumber = headerRowNumber.insertCell(-1)
   headerCellName.innerHTML = 'Task Name'
   headerCellNumber.innerHTML = 'Task Number'
   dtmsTngToTrack.forEach(function(tngEntry) {
@@ -532,52 +368,59 @@ function displayPersonnelCompliance (unit) {
     headerCellNumber = headerRowNumber.insertCell(-1)
     headerCellNumber.innerHTML = tngEntry['TaskNumber']
   })
+
   let unitTableBody = document.createElement('tbody')
-  //let unitRow = ''
   let personRow = ''
-  dtmsPersReport.forEach(function(person) {
-    if (person['UnitAssigned'] === unit) {
-      // show the training dates for a person
-      personRow = generatePersonTrainingRow(person)
-      unitTableBody.appendChild(personRow)
-    }
+  persList.forEach(function(person) {
+    // show the training dates for a person
+    personRow = generatePersonTrainingRow(person)
+    unitTableBody.appendChild(personRow)
   })
   personTable.appendChild(unitTableBody)
+  $("#personTable").tablesorter({
+    theme: 'bootstrap',
+    sortReset: true,
+    sortRestart: true,
+  })
+  $("#personTable").trigger("updateAll")
 }
 
 function generatePersonTrainingRow (person) {
   let persHeaderRow = document.createElement('tr')
-  let persHeaderCell = persHeaderRow.insertCell(-1)
   let dateData = ''
+
+  let persHeaderCell = persHeaderRow.insertCell(-1)
+  persHeaderCell.innerHTML = person['RankShort']
+  persHeaderCell = persHeaderRow.insertCell(-1)
   persHeaderCell.innerHTML = person['LastName']
+
   dtmsTngToTrack.forEach(function(tngToTrack) {
     personCell = persHeaderRow.insertCell(-1)
-    dtmsTngReport.forEach(function(tngRecord) {
-      // also check to see if the person's name matches
-      if(tngToTrack['TaskNumber'] === tngRecord['TaskNumber'] && person['Last4'] === tngRecord['Last4'] && person['LastName'] === tngRecord['LastName']) {
-        // parse the date and then show the box 
-        // green - good to go
-        // yellow - will expire in the next 30 days
-        // red - expired or no record found
-        let tngDate = tngRecord['parsedLastDateTrained']
-        let curDate = new DateTime.local()
-        let expDate = tngDate.plus({ days: parseInt(tngToTrack['Frequency']) })
-        let tngDuration = expDate.diff(curDate, 'days')
-        personCell.innerHTML = tngDate.toFormat('MM/dd/yyyy') 
-        personCell.innerHTML += ' (' + Math.round(tngDuration.get('days')) + ')'
-        if (tngDuration.get('days') > 30) {
-        // tng is valid for more than 30 days, bg should be green
-          personCell.bgColor = 'green'
-          personCell.style.color = 'black'
-        } else if (tngDuration.get('days') > 0) {
-          personCell.bgColor = 'yellow'
-          personCell.style.color = 'black'
-        } else {
-          personCell.bgColor = 'red'
-          personCell.style.color = 'white'
-        }
+    let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tngToTrack['TaskNumber']
+    completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash })
+    if (completedTngRecord.length > 0) {
+      // parse the date and then show the box 
+      // green - good to go
+      // yellow - will expire in the next 30 days
+      // red - expired or no record found
+      let tngDate = completedTngRecord[0]['parsedLastDateTrained']
+      let curDate = new DateTime.local()
+      let expDate = tngDate.plus({ days: parseInt(tngToTrack['Frequency']) })
+      let tngDuration = expDate.diff(curDate, 'days')
+      personCell.innerHTML = tngDate.toFormat('MM/dd/yyyy') 
+      personCell.innerHTML += ' (' + Math.round(tngDuration.get('days')) + ')'
+      if (tngDuration.get('days') > 30) {
+      // tng is valid for more than 30 days, bg should be green
+        personCell.bgColor = 'green'
+        personCell.style.color = 'black'
+      } else if (tngDuration.get('days') > 0) {
+        personCell.bgColor = 'yellow'
+        personCell.style.color = 'black'
+      } else {
+        personCell.bgColor = 'red'
+        personCell.style.color = 'white'
       }
-    })
+    }
     if (personCell.innerHTML === '') {
       personCell.bgColor = 'red'
     }
@@ -595,6 +438,17 @@ function dedupTngRecords (tngRecord) {
   }
 }
 
+function getTngForList (tngRecord) {
+  if (this.persKeyArray.includes(tngRecord['LastName'] + "|" + tngRecord['Last4'])) {
+    return this['TaskNumber'] === tngRecord['TaskNumber']
+  }
+}
+
+function getPersonTngRecord (tngRecord) {
+  let tngHash = tngRecord['LastName'] + "|" + tngRecord['Last4'] + "|" + tngRecord['TaskNumber']
+  return (this.personHash === tngHash)
+}
+
 function getUnits (persRecord) {
   if (persRecord['UnitAttached'] !== undefined && persRecord['UnitAttached'].length > 0) {
     return persRecord['UnitAttached'] 
@@ -603,11 +457,16 @@ function getUnits (persRecord) {
   }
 }
 
-function getTngs (tngRecord) {
+function getPeopleInUnit (persRecord) {
+  // check to see if the unit selector is set to 'All', if yes then send back every record
+  if (this.unit === 'All') {
+    return true
+  }
+  // check to see if the soldier is attached to the unit, if attached to a unit, then he should not be listed on the 'assigned' roster
   if (persRecord['UnitAttached'] !== undefined && persRecord['UnitAttached'].length > 0) {
-    return persRecord['UnitAttached'] 
+    return persRecord['UnitAttached'] === this.unit
   } else {
-    return persRecord['UnitAssigned'] 
+    return persRecord['UnitAssigned'] === this.unit
   }
 }
 
@@ -617,8 +476,6 @@ function getUniqueValues (valueArray, valueRecord) {
   }
   return valueArray
 }
-
-// SORT FUNCTIONS 
 
 // sort by the date column descending (newest value on the top)
 function sortByDateDesc (sort_file) {
@@ -643,41 +500,6 @@ function sortByUnit (sort_file) {
   return sort_file
 }
 
-function unitExists(unitName) {
-  return dtmsUnits.some(function(el) {
-    return el.unit === unitName
-  })  
-}
-
-function getDTMSUnits (units, record) {
-  // check to see if the 'UnitAttached' is not undefined and length > 0
-  if (record['UnitAttached'] !== undefined && record['UnitAttached'].length > 0) {
-    if (!units.includes(record['UnitAttached'])) {
-      units.push(record['UnitAttached'])
-    }
-    return units
-  }
-  if (!units.includes(record['UnitAssigned'])) {
-    units.push(record['UnitAssigned'])
-  }
-  return units
-}
-
-function getUnitSoldierList (persRecord) {
-  // check to see if the unit selector is set to 'All', if yes then send back every record
-  if (this.unit.toString() === 'All') {
-    return true
-  }
-  // check to see if the soldier is attached to the unit, if attached to a unit, then he should not be listed on the 'assigned' roster
-  try {
-    if (persRecord['UnitAttached'].length > 0) {
-      return persRecord['UnitAttached'] === this.unit.toString()
-    }
-  } catch (e) {
-  }
-  return persRecord['UnitAssigned'] === this.unit.toString()
-}
-
 function getDACivilians (record) {
   return record['RankShort'].indexOf('GS') >= 0
 }
@@ -686,18 +508,18 @@ function getSoldiers (record) {
   return record['RankShort'].indexOf('GS') === -1
 }
 
-// get personnel assigned
-// get soldier assigned
-// get civilians
+// get the supervisors -> will be MAJ and GS13 at this time
+function getSupervisors (persRecord) {
+  return (persRecord['RankShort'] === 'MAJ' || persRecord['RankShort'] === 'GS13')
+}
 
-// from a list of Soldiers return the following
+function checkTngValid (tngRecord) {
+  return tngRecord['parsedLastDateTrained'].plus({ days: this.frequency }) >= this.dayValue
+}
 
-// training records
-// total numbers in the unit
-
-
-
-
+function getTngToTrackRecord (tngToTrack) {
+  return tngToTrack['TaskNumber'] === this.tng
+}
 </script>
 </body>
 </html>
