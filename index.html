@@ -286,6 +286,18 @@ function showTngList (tng, unit) {
   let personRecords = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
 
   let tngToTrackRecord = dtmsTngToTrack.filter(getTngToTrackRecord,{ tng: tng })
+  let audience = tngToTrackRecord[0]['Audience']
+  if (audience === 'All') {
+    personRecords = personRecords
+  } else if (audience === 'Soldiers') {
+    personRecords = personRecords.filter(getSoldiers)
+  } else if (audience === 'Civilians') {
+    personRecords = personRecords.filter(getDACivilians)
+  } else if (audience === 'Supervisors') {
+    personRecords = personRecords.filter(getSupervisors)
+  } else {
+    personRecords = personRecords
+  }
   let frequency = tngToTrackRecord[0]['Frequency']
   let dayValue = luxon.DateTime.local()
 
@@ -328,6 +340,8 @@ function showTngList (tng, unit) {
     } else {
       personTngDateCell.innerHTML = ''
       personTngCell.innerHTML = ''
+      personRow.bgColor = 'red'
+      personRow.style.color = 'white'
     }
   })
   personTable.appendChild(personTableBody)
