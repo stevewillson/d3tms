@@ -65,7 +65,7 @@ $('#dtmsPersReportXslx').on('change', function(event) {
 })
 
 // create the dtmsTngReport from the Xslx file
-// this contains personnel training records
+// this contains training records
 $('#dtmsTngReportXslx').on('change', function(event) {
   var dtmsTngReportFile = event.target.files[0]
   var reader = new FileReader()
@@ -95,7 +95,8 @@ $('#dtmsTngReportXslx').on('change', function(event) {
   reader.readAsBinaryString(dtmsTngReportFile)
 })
 
-// load the Xslx to create the dtmsTngToTrack - this is the list of trainings that will be displayed in the chart
+// create the dtmsTngToTrack from the Xslx file
+// list of trainings that will be displayed
 $('#dtmsTngToTrackXslx').on('change', function(event) {
   let dtmsTngToTrackFile = event.target.files[0]
   let reader = new FileReader()
@@ -112,24 +113,15 @@ $('#dtmsTngToTrackXslx').on('change', function(event) {
   reader.readAsBinaryString(dtmsTngToTrackFile)
 })
 
-// add the unitAssigned value to the training report data structure 
-function addUnitToTngReport (dtmsTngReport, dtmsPersReport) {
-  dtmsTngReport.forEach(function(record) {
-    dtmsPersReport.forEach(function(person) {
-      if(record.LastName == person.LastName && record.Last4 == person.Last4) {
-        record['UnitAssigned'] = person['UnitAssigned']
-      }  
-    })
-  })
-  return dtmsTngReport
+function getUnitSize (unit) {
+  return unit.persCount
 }
 
-function genLastNameLast4Keys (keyArray, persRecord) {
-  keyArray.push(persRecord['LastName'] + '|' + persRecord['Last4'])
-  return keyArray
+function getMaxOfArray(a, b) {
+  return Math.max(a, b)
 }
 
-// count the personnel by unit
+// display a personnel bar chart by unit
 $('#displayUnitSize').on('click', function () {
   let dtmsUnitArray = dtmsPersReport.map(getUnits)
     .reduce(getUniqueValues,[])
@@ -140,8 +132,13 @@ $('#displayUnitSize').on('click', function () {
     persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
     unitSize.push({ unit: unit, persCount: persList.length }) 
   })
+
+  // set the max of the domain to be the most people that are in a unit
+  // get the max number of people in a unit
+  let maxSize = unitSize.map(getUnitSize).reduce(getMaxOfArray)
+
   var scale = d3.scaleLinear()
-    .domain([0,39])
+    .domain([0,maxSize])
     .range([0,600])
 
   d3.select(".chart")
@@ -248,7 +245,11 @@ function generate350_1Table () {
       // set the chart up here
       let compliance = Math.round(100 * complete / required)
       unitCell.innerHTML = compliance + '%<br>' + complete + '/' + required
-      if(compliance < 70) {
+      if(isNaN(compliance)) {
+        unitCell.innerHTML = ''
+        unitCell.bgColor = 'black'
+        unitCell.style.color = 'black'
+      } else if(compliance < 70) {
         unitCell.bgColor = 'red'
         unitCell.style.color = 'white'
       } else if (compliance < 80) {
@@ -257,7 +258,7 @@ function generate350_1Table () {
       } else {
         unitCell.bgColor = 'green'
         unitCell.style.color = 'black'
-      }
+      } 
       unitCell.setAttribute('data-unit',unit)
       unitCell.setAttribute('data-tng',tngEntry['TaskNumber'])
       unitCell.onclick = tngListClickHandler
@@ -266,18 +267,23 @@ function generate350_1Table () {
   complianceTable.appendChild(complianceTableBody)
 }
 
+function genLastNameLast4Keys (keyArray, persRecord) {
+  keyArray.push(persRecord['LastName'] + '|' + persRecord['Last4'])
+  return keyArray
+}
+
 function unitListClickHandler (e) {
   let unit = e.srcElement.getAttribute('data-unit')
-  e.srcElement.bgColor = 'orange'
-  e.srcElement.style.color = 'black'
+  //e.srcElement.bgColor = 'orange'
+  //e.srcElement.style.color = 'black'
   displayPersonnelCompliance(unit)
 }
 
 function tngListClickHandler (e) {
   let unit = e.srcElement.getAttribute('data-unit')
   let tng = e.srcElement.getAttribute('data-tng')
-  e.srcElement.bgColor = 'orange'
-  e.srcElement.style.color = 'black'
+  //e.srcElement.bgColor = 'orange'
+  //e.srcElement.style.color = 'black'
   showTngList(tng, unit)
 }
 
