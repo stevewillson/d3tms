@@ -326,7 +326,8 @@ function showTngList (tng, unit) {
   let personTableBody = document.createElement('tbody')
   personRecords.forEach(function(person) {
 
-    let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tng
+    //let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tng
+    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng
     completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash })
 
     let personRow = personTableBody.insertRow(-1)
@@ -416,7 +417,8 @@ function generatePersonTrainingRow (person) {
 
   dtmsTngToTrack.forEach(function(tngToTrack) {
     personCell = persHeaderRow.insertCell(-1)
-    let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tngToTrack['TaskNumber']
+    //let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tngToTrack['TaskNumber']
+    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng
     completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash })
     if (completedTngRecord.length > 0) {
       // parse the date and then show the box 
@@ -465,7 +467,7 @@ function getTngForList (tngRecord) {
 }
 
 function getPersonTngRecord (tngRecord) {
-  let tngHash = tngRecord['LastName'] + "|" + tngRecord['Last4'] + "|" + tngRecord['TaskNumber']
+  let tngHash = tngRecord['RankShort'] + "|" + tngRecord['FirstName'] + "|" + tngRecord['LastName'] + "|" + tngRecord['TaskNumber']
   return (this.personHash === tngHash)
 }
 
