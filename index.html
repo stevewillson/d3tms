@@ -8,17 +8,17 @@
 <body>
 
 <div class="form-group">
-  <label for="dtmsPersReportXslx">Choose the DTMS personnel file</label>
+  <label for="dtmsPersReportXslx">DTMS Personnel File</label>
   <input type="file" id="dtmsPersReportXslx" name="dtmsPersReportXslx"/>
 </div>
 
 <div class="form-group">
-  <label for="dtmsTngReportXslx">Choose the DTMS training report to process</label>
+  <label for="dtmsTngReportXslx">DTMS Training Report</label>
   <input type="file" id="dtmsTngReportXslx" name="dtmsTngReportXslx"/>
 </div>
 
 <div class="form-group">
-  <label for="dtmsTngToTrackXslx">Choose the DTMS training to track</label>
+  <label for="dtmsTngToTrackXslx">DTMS Training to Present</label>
   <input type="file" id="dtmsTngToTrackXslx" name="dtmsTngToTrackXslx"/>
 </div>
 
@@ -28,7 +28,6 @@
 </div>
 
 <div class="chart"> </div> 
-<div class="tngComplianceChart"> </div> 
 <table id="complianceTable" class="table table-dark table-bordered" > </table> 
 <table id="personTable" class="table table-dark table-bordered" > </table> 
 
@@ -41,105 +40,480 @@
 <script src="js/jquery.tablesorter.min.js"></script>
 
 <script>
-var DateTime = luxon.DateTime
-var dtmsPersReport = []
-var dtmsTngReport = []
-var dtmsTngToTrack = []
+var DateTime = luxon.DateTime;
+var dtmsPersReport = [];
+var dtmsTngReport = [];
+var dtmsTngToTrack = [];
 
 // create the dtmsPersReport from the Xslx file
-// this is the personnel report from DTMS
+// personnel report from DTMS
 $('#dtmsPersReportXslx').on('change', function(event) {
-  var dtmsPersReportFile = event.target.files[0]
-  var reader = new FileReader()
+  var dtmsPersReportFile = event.target.files[0];
+  var reader = new FileReader();
   reader.onload = function (e) {
-    var data = e.target.result
+    var data = e.target.result;
     var workbook = XLSX.read(data, {
       type: 'binary'
-    })
+    });
     dtmsPersReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-  }
+  };
   reader.onerror = function (ex) {
-    console.log(ex)
-  }
-  reader.readAsBinaryString(dtmsPersReportFile)
-})
+    console.log(ex);
+  };
+  reader.readAsBinaryString(dtmsPersReportFile);
+});
 
 // create the dtmsTngReport from the Xslx file
 // this contains training records
 $('#dtmsTngReportXslx').on('change', function(event) {
-  var dtmsTngReportFile = event.target.files[0]
-  var reader = new FileReader()
+  var dtmsTngReportFile = event.target.files[0];
+  var reader = new FileReader();
   reader.onload = function (e) {
-    var data = e.target.result
+    var data = e.target.result;
     var workbook = XLSX.read(data, {
       type: 'binary',
       cellDates: true, 
-    })
+    });
     dtmsTngReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
     // sort by date trained and remove duplicate person entries from the tng report
     // only interested in the latest date trained
 
     dtmsTngReport.forEach(function(tngRecord) {
-      tngRecord['parsedLastDateTrained'] = DateTime.fromJSDate(tngRecord['LastDateTrained'])
-    })
+      tngRecord['parsedLastDateTrained'] = DateTime.fromJSDate(tngRecord['LastDateTrained']);
+    });
 
     // sort the training by the date completed
-    dtmsTngReport = sortByDateDesc(dtmsTngReport)
+    dtmsTngReport = sortByDateDesc(dtmsTngReport);
 
     // deduplicate the training records by person and tasknumber
-    dtmsTngReport = dtmsTngReport.filter(dedupTngRecords, Object.create(null))
-  }
+    dtmsTngReport = dtmsTngReport.filter(dedupTngRecords, []);
+  };
   reader.onerror = function (ex) {
-    console.log(ex)
-  }
-  reader.readAsBinaryString(dtmsTngReportFile)
-})
+    console.log(ex);
+  };
+  reader.readAsBinaryString(dtmsTngReportFile);
+});
 
 // create the dtmsTngToTrack from the Xslx file
 // list of trainings that will be displayed
 $('#dtmsTngToTrackXslx').on('change', function(event) {
-  let dtmsTngToTrackFile = event.target.files[0]
-  let reader = new FileReader()
+  let dtmsTngToTrackFile = event.target.files[0];
+  let reader = new FileReader();
   reader.onload = function (e) {
-    let data = e.target.result
+    let data = e.target.result;
     let workbook = XLSX.read(data, {
       type: 'binary'
-    })
+    });
     dtmsTngToTrack = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
   }
   reader.onerror = function (ex) {
-    console.log(ex)
+    console.log(ex);
   }
-  reader.readAsBinaryString(dtmsTngToTrackFile)
-})
+  reader.readAsBinaryString(dtmsTngToTrackFile);
+});
 
-function getUnitSize (unit) {
-  return unit.persCount
+// DRAWING FUNCTIONS
+
+function generate350_1Table () {
+  var complianceTable = document.getElementById('complianceTable');
+
+  // remove the current table
+  while(complianceTable.hasChildNodes()) {
+     complianceTable.removeChild(complianceTable.firstChild);
+  };
+
+  // setup the header, get the trainings that need to be displayed
+  var header = complianceTable.createTHead();
+  var headerRowName = header.insertRow(-1);
+  var headerRowNumber = header.insertRow(-1);
+  var headerCellName = headerRowName.insertCell(-1);
+  var headerCellNumber = headerRowNumber.insertCell(-1);
+  headerCellName.innerHTML = 'Task Name';
+  headerCellNumber.innerHTML = 'Task Number';
+  dtmsTngToTrack.forEach(function(tngEntry) {
+    headerCellName = headerRowName.insertCell(-1);
+    headerCellName.innerHTML = tngEntry['TaskName'];
+    headerCellNumber = headerRowNumber.insertCell(-1);
+    headerCellNumber.innerHTML = tngEntry['TaskNumber'];
+  });
+
+  complianceTableBody = document.createElement('tbody');
+
+  // reduce to only include unique values
+  let dtmsUnitArray = dtmsPersReport.map(getUnits)
+    .reduce(getUniqueValues,[])
+    .sort();
+
+  // add 'All' value at the end
+  dtmsUnitArray.push('All');
+
+  dtmsUnitArray.forEach(function(unit) {
+    let unitRow = complianceTableBody.insertRow(-1);
+    let unitCell = unitRow.insertCell(-1);
+    unitCell.innerHTML = unit;
+    unitCell.setAttribute('data-unit',unit);
+    unitCell.onclick = unitListClickHandler;
+
+    // iterate through the tracked trainings training entries
+    dtmsTngToTrack.forEach(function(tngEntry) {
+
+      unitCell = unitRow.insertCell(-1);
+      // get the people for that unit that should complete the training
+      let persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit });
+      let persNum = persList.length;
+      let soldierNum = persList.filter(getSoldiers).length;
+      let daCivNum = persList.filter(getDACivilians).length;
+
+      // get the training records for the soldiers in the unit for this training
+      let persHashArray = persList.reduce(genPersonHashArray,[]);
+      let tngCompleted = dtmsTngReport.filter(getTngForList,{ persHashArray: persHashArray, TaskNumber: tngEntry['TaskNumber'] });
+      let dayValue = luxon.DateTime.local();
+      let nonExpiredTngCompleted = tngCompleted.filter(checkTngValid,{ frequency: tngEntry['Frequency'], dayValue: dayValue });
+
+      let soldiersCompleted = nonExpiredTngCompleted.filter(getSoldiers).length;
+      let daCivsCompleted = nonExpiredTngCompleted.filter(getDACivilians).length;
+      let supervisorsCompleted = nonExpiredTngCompleted.filter(getSupervisors).length;
+
+      let audience = tngEntry['Audience'];
+      let required = 0;
+      let complete = 0;
+
+      if (audience === 'All') {
+        required = persNum;
+        complete = nonExpiredTngCompleted.length;
+      } else if (audience === 'Soldiers') {
+        required = soldierNum;
+        complete = soldiersCompleted;
+      } else if (audience === 'Civilians') {
+        required = daCivNum;
+        complete = daCivsCompleted;
+      } else if (audience === 'Supervisors') {
+        required = persList.filter(getSupervisors).length;
+        complete = supervisorsCompleted;
+      } else {
+        required = persNum;
+        complete = nonExpiredTngCompleted.length;
+      };
+
+      // set the chart up here
+      let compliance = Math.round(100 * complete / required);
+      unitCell.innerHTML = compliance + '%<br>' + complete + '/' + required;
+      if(isNaN(compliance)) {
+        unitCell.innerHTML = '';
+        unitCell.bgColor = 'black';
+        unitCell.style.color = 'black';
+      } else if(compliance < 70) {
+        unitCell.bgColor = 'red';
+        unitCell.style.color = 'white';
+      } else if (compliance < 80) {
+        unitCell.bgColor = 'yellow';
+        unitCell.style.color = 'black';
+      } else {
+        unitCell.bgColor = 'green';
+        unitCell.style.color = 'black';
+      };
+      unitCell.setAttribute('data-unit',unit);
+      unitCell.setAttribute('data-tng',tngEntry['TaskNumber']);
+      unitCell.onclick = tngListClickHandler;
+    });
+  });
+  complianceTable.appendChild(complianceTableBody);
 }
+
+function showTngList (tng, unit) {
+  // retrieve records for a unit for a tng
+  let personRecords = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit });
+
+  let tngToTrackRecord = dtmsTngToTrack.filter(getTngToTrackRecord,{ tng: tng });
+  let audience = tngToTrackRecord[0]['Audience'];
+  if (audience === 'All') {
+    personRecords = personRecords;
+  } else if (audience === 'Soldiers') {
+    personRecords = personRecords.filter(getSoldiers);
+  } else if (audience === 'Civilians') {
+    personRecords = personRecords.filter(getDACivilians);
+  } else if (audience === 'Supervisors') {
+    personRecords = personRecords.filter(getSupervisors);
+  } else {
+    personRecords = personRecords;
+  };
+  let frequency = tngToTrackRecord[0]['Frequency'];
+  let dayValue = luxon.DateTime.local();
+
+  let personTable = document.getElementById('personTable');
+
+  // remove the current table
+  while(personTable.hasChildNodes()) {
+     personTable.removeChild(personTable.firstChild);
+  }
+  let header = personTable.createTHead();
+  let headerRow = header.insertRow(-1);
+  let rankHeaderCell = headerRow.insertCell(-1);
+  rankHeaderCell.innerHTML = 'Rank';
+  let nameHeaderCell = headerRow.insertCell(-1);
+  nameHeaderCell.innerHTML = 'Name';
+  let tngHeaderCell = headerRow.insertCell(-1);
+  tngHeaderCell.innerHTML = 'Task Number';
+  let tngDateHeaderCell = headerRow.insertCell(-1);
+  tngDateHeaderCell.innerHTML = 'Date Trained';
+  let personTableBody = document.createElement('tbody');
+  personRecords.forEach(function(person) {
+
+    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng;
+    completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash });
+
+    let personRow = personTableBody.insertRow(-1);
+    let personRankCell = personRow.insertCell(-1);
+    let personNameCell = personRow.insertCell(-1);
+    let personTngCell = personRow.insertCell(-1);
+    let personTngDateCell = personRow.insertCell(-1);
+    personRankCell.innerHTML = person.RankShort;
+    personNameCell.innerHTML = person.LastName;
+    if (completedTngRecord.length > 0) {
+      personTngCell.innerHTML = completedTngRecord[0].TaskNumber;
+      personTngDateCell.innerHTML = completedTngRecord[0].parsedLastDateTrained.toFormat('MM/dd/yyyy');
+      if (completedTngRecord[0].parsedLastDateTrained.plus({ days: frequency }) < dayValue) {
+        personRow.bgColor = 'red';
+        personRow.style.color = 'white';
+      };
+    } else {
+      personTngDateCell.innerHTML = '';
+      personTngCell.innerHTML = '';
+      personRow.bgColor = 'red';
+      personRow.style.color = 'white';
+    };
+  });
+  personTable.appendChild(personTableBody);
+
+  $("#personTable").tablesorter({
+    theme: 'bootstrap',
+    sortReset: true,
+    sortRestart: true,
+  });
+  $("#personTable").trigger("updateAll");
+};
+
+function displayPersonnelCompliance (unit) {
+  // loop through all the personnel
+  let personTable = document.getElementById('personTable');
+  // remove the current table
+  while(personTable.hasChildNodes()) {
+     personTable.removeChild(personTable.firstChild);
+  };
+
+  // given a unit, display the people in that unit and when they completed the tracked training, display 'red' background if they do not have a training record
+  let persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit });
+
+  // setup the header, get the trainings that need to be displayed
+  let header = personTable.createTHead();
+  let headerRowName = header.insertRow(-1);
+  let headerRowNumber = header.insertRow(-1);
+  let headerCellName = headerRowName.insertCell(-1);
+  let headerCellNumber = headerRowNumber.insertCell(-1);
+  headerCellName = headerRowName.insertCell(-1);
+  headerCellNumber = headerRowNumber.insertCell(-1);
+  headerCellName.innerHTML = 'Task Name';
+  headerCellNumber.innerHTML = 'Task Number';
+  dtmsTngToTrack.forEach(function(tngEntry) {
+    headerCellName = headerRowName.insertCell(-1);
+    headerCellName.innerHTML = tngEntry['TaskName'];
+    headerCellNumber = headerRowNumber.insertCell(-1);
+    headerCellNumber.innerHTML = tngEntry['TaskNumber'];
+  });
+
+  let unitTableBody = document.createElement('tbody');
+  let personRow = '';
+  persList.forEach(function(person) {
+    // show the training dates for a person
+    personRow = generatePersonTrainingRow(person);
+    unitTableBody.appendChild(personRow);
+  });
+  personTable.appendChild(unitTableBody);
+  $("#personTable").tablesorter({
+    theme: 'bootstrap',
+    sortReset: true,
+    sortRestart: true,
+  });
+  $("#personTable").trigger("updateAll");
+};
+
+function generatePersonTrainingRow (person) {
+  let persHeaderRow = document.createElement('tr');
+  let dateData = '';
+
+  let persHeaderCell = persHeaderRow.insertCell(-1);
+  persHeaderCell.innerHTML = person['RankShort'];
+  persHeaderCell = persHeaderRow.insertCell(-1);
+  persHeaderCell.innerHTML = person['LastName'];
+
+  dtmsTngToTrack.forEach(function(tngToTrack) {
+    personCell = persHeaderRow.insertCell(-1);
+    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng;
+    completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash });
+    if (completedTngRecord.length > 0) {
+      // parse the date and then show the box 
+      // green - good to go
+      // yellow - will expire in the next 30 days
+      // red - expired or no record found
+      let tngDate = completedTngRecord[0]['parsedLastDateTrained'];
+      let curDate = new DateTime.local();
+      let expDate = tngDate.plus({ days: parseInt(tngToTrack['Frequency']) });
+      let tngDuration = expDate.diff(curDate, 'days');
+      personCell.innerHTML = tngDate.toFormat('MM/dd/yyyy');
+      personCell.innerHTML += ' (' + Math.round(tngDuration.get('days')) + ')';
+      if (tngDuration.get('days') > 30) {
+      // tng is valid for more than 30 days, bg should be green
+        personCell.bgColor = 'green';
+        personCell.style.color = 'black';
+      } else if (tngDuration.get('days') > 0) {
+        personCell.bgColor = 'yellow';
+        personCell.style.color = 'black';
+      } else {
+        personCell.bgColor = 'red';
+        personCell.style.color = 'white';
+      };
+    };
+    if (personCell.innerHTML === '') {
+      personCell.bgColor = 'red';
+    };
+  });
+  return persHeaderRow;
+};
+
+// UTILITY FUNCTIONS
+
+function dedupTngRecords (tngRecord) {
+  // filter the array for the values to get distinct values for:
+  // RankShort, FirstName, LastName, TaskNumber
+  let key = tngRecord['RankShort'] + "|" + tngRecord['FirstName'] + "|" + tngRecord['LastName'] + "|" + tngRecord['TaskNumber']
+  if (!this[key]) {
+    this[key] = true;
+    return true;
+  };
+};
+
+function getTngForList (tngRecord) {
+  if (this.persHashArray.includes(tngRecord['RankShort'] + "|" + tngRecord['FirstName'] + "|" + tngRecord['LastName'])) {
+    return this['TaskNumber'] === tngRecord['TaskNumber'];
+  };
+};
+
+function getPersonTngRecord (tngRecord) {
+  let tngHash = tngRecord['RankShort'] + "|" + tngRecord['FirstName'] + "|" + tngRecord['LastName'] + "|" + tngRecord['TaskNumber'];
+  return (this.personHash === tngHash);
+};
+
+function getUnits (persRecord) {
+  if (persRecord['UnitAttached'] !== undefined && persRecord['UnitAttached'].length > 0) {
+    return persRecord['UnitAttached'];
+  } else {
+    return persRecord['UnitAssigned'];
+  };
+};
+
+function getPeopleInUnit (persRecord) {
+  // check to see if the unit selector is set to 'All', if yes then send back every record
+  if (this.unit === 'All') {
+    return true;
+  };
+  // check to see if the soldier is attached to the unit, if attached to a unit, then he should not be listed on the 'assigned' roster
+  if (persRecord['UnitAttached'] !== undefined && persRecord['UnitAttached'].length > 0) {
+    return persRecord['UnitAttached'] === this.unit;
+  } else {
+    return persRecord['UnitAssigned'] === this.unit;
+  };
+};
+
+function getUniqueValues (valueArray, valueRecord) {
+  if (!valueArray.includes(valueRecord)) {
+    valueArray.push(valueRecord);
+  };
+  return valueArray;
+};
+
+// sort by the date column descending (newest value on the top)
+function sortByDateDesc (sort_file) {
+  // sort by the unit
+  sort_file.sort( function(a, b) {
+    if (a.parsedLastDateTrained.valueOf() > b.parsedLastDateTrained.valueOf()) { 
+      return -1;
+    } else if (a.parsedLastDateTrained.valueOf() < b.parsedLastDateTrained.valueOf()) { 
+      return 1;
+    } else {
+      return 0;
+    };
+  });
+  return sort_file;
+};
+
+function getDACivilians (record) {
+  return record['RankShort'].indexOf('GS') >= 0;
+};
+
+function getSoldiers (record) {
+  return record['RankShort'].indexOf('GS') === -1;
+};
+
+// get the supervisors -> will be MAJ and GS13 at this time
+function getSupervisors (persRecord) {
+  return (persRecord['RankShort'] === 'MAJ' || persRecord['RankShort'] === 'GS13');
+};
+
+function checkTngValid (tngRecord) {
+  return tngRecord['parsedLastDateTrained'].plus({ days: this.frequency }) >= this.dayValue;
+};
+
+function getTngToTrackRecord (tngToTrack) {
+  return tngToTrack['TaskNumber'] === this.tng;
+};
 
 function getMaxOfArray(a, b) {
-  return Math.max(a, b)
-}
+  return Math.max(a, b);
+};
+
+function genPersonHashArray (keyArray, persRecord) {
+  keyArray.push(persRecord['RankShort'] + '|' + persRecord['FirstName'] + '|' + persRecord['LastName']);
+  return keyArray;
+};
+
+
+// CLICK HANDLERS AND BUTTONS
+
+function unitListClickHandler (e) {
+  let unit = e.srcElement.getAttribute('data-unit');
+  //e.srcElement.bgColor = 'orange';
+  //e.srcElement.style.color = 'black';
+  displayPersonnelCompliance(unit);
+};
+
+function tngListClickHandler (e) {
+  let unit = e.srcElement.getAttribute('data-unit');
+  let tng = e.srcElement.getAttribute('data-tng');
+  //e.srcElement.bgColor = 'orange';
+  //e.srcElement.style.color = 'black';
+  showTngList(tng, unit);
+};
 
 // display a personnel bar chart by unit
 $('#displayUnitSize').on('click', function () {
   let dtmsUnitArray = dtmsPersReport.map(getUnits)
     .reduce(getUniqueValues,[])
-    .sort()
-  let unitSize = []
-  let persList = []
+    .sort();
+  let unitSize = [];
+  let persList = [];
   dtmsUnitArray.forEach(function (unit) {
-    persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
-    unitSize.push({ unit: unit, persCount: persList.length }) 
-  })
+    persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit });
+    unitSize.push({ unit: unit, persCount: persList.length });
+  });
 
   // set the max of the domain to be the most people that are in a unit
   // get the max number of people in a unit
-  let maxSize = unitSize.map(getUnitSize).reduce(getMaxOfArray)
+  let maxSize = unitSize.map((unit) => { return unit.persCount })
+    .reduce(getMaxOfArray);
 
   var scale = d3.scaleLinear()
     .domain([0,maxSize])
-    .range([0,600])
+    .range([0,600]);
 
   d3.select(".chart")
     .selectAll("div")
@@ -147,401 +521,20 @@ $('#displayUnitSize').on('click', function () {
       .enter()
       .append("div")
       .style("width", function(d) { return scale(d.persCount) + 'px' })
-      .text(function(d) { return d.unit + " Personnel: " + d.persCount })
-})
+      .text(function(d) { return d.unit + " Personnel: " + d.persCount });
+});
 
 $('#display350_1Compliance').on('click', function () {
   // build the html table to show the training data
-  generate350_1Table()
+  generate350_1Table();
 
   $("#complianceTable").tablesorter({
     theme: 'bootstrap',
     sortReset: true,
     sortRestart: true,
-  })
-  $("#complianceTable").trigger("updateAll")
-})
-
-function generate350_1Table () {
-  var complianceTable = document.getElementById('complianceTable')
-
-  // remove the current table
-  while(complianceTable.hasChildNodes()) {
-     complianceTable.removeChild(complianceTable.firstChild);
-  }
-
-  // setup the header, get the trainings that need to be displayed
-  var header = complianceTable.createTHead()
-  var headerRowName = header.insertRow(-1)
-  var headerRowNumber = header.insertRow(-1)
-  var headerCellName = headerRowName.insertCell(-1)
-  var headerCellNumber = headerRowNumber.insertCell(-1)
-  headerCellName.innerHTML = 'Task Name'
-  headerCellNumber.innerHTML = 'Task Number'
-  dtmsTngToTrack.forEach(function(tngEntry) {
-    headerCellName = headerRowName.insertCell(-1)
-    headerCellName.innerHTML = tngEntry['TaskName']
-    headerCellNumber = headerRowNumber.insertCell(-1)
-    headerCellNumber.innerHTML = tngEntry['TaskNumber']
-  })
-
-  complianceTableBody = document.createElement('tbody')
-
-  // reduce to only include unique values
-  let dtmsUnitArray = dtmsPersReport.map(getUnits)
-    .reduce(getUniqueValues,[])
-    .sort()
-
-  // add 'All' value at the end
-  dtmsUnitArray.push('All')
-
-  dtmsUnitArray.forEach(function(unit) {
-    let unitRow = complianceTableBody.insertRow(-1)
-    let unitCell = unitRow.insertCell(-1)
-    unitCell.innerHTML = unit
-    unitCell.setAttribute('data-unit',unit)
-    unitCell.onclick = unitListClickHandler
-
-    // iterate through the tracked trainings training entries
-    dtmsTngToTrack.forEach(function(tngEntry) {
-
-      unitCell = unitRow.insertCell(-1)
-      // get the people for that unit that should complete the training
-      let persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
-      let persNum = persList.length
-      let soldierNum = persList.filter(getSoldiers).length
-      let daCivNum = persList.filter(getDACivilians).length
-
-      // get the training records for the soldiers in the unit for this training
-      let persKeyArray = persList.reduce(genLastNameLast4Keys,[])
-      let tngCompleted = dtmsTngReport.filter(getTngForList,{ persKeyArray: persKeyArray, TaskNumber: tngEntry['TaskNumber'] })
-      let dayValue = luxon.DateTime.local()
-      let nonExpiredTngCompleted = tngCompleted.filter(checkTngValid,{ frequency: tngEntry['Frequency'], dayValue: dayValue })
-
-      let soldiersCompleted = nonExpiredTngCompleted.filter(getSoldiers).length
-      let daCivsCompleted = nonExpiredTngCompleted.filter(getDACivilians).length
-      let supervisorsCompleted = nonExpiredTngCompleted.filter(getSupervisors).length
-
-      let audience = tngEntry['Audience']
-      let required = 0
-      let complete = 0
-      if (audience === 'All') {
-        required = persNum
-        complete = nonExpiredTngCompleted.length
-      } else if (audience === 'Soldiers') {
-        required = soldierNum
-        complete = soldiersCompleted
-      } else if (audience === 'Civilians') {
-        required = daCivNum
-        complete = daCivsCompleted
-      } else if (audience === 'Supervisors') {
-        required = persList.filter(getSupervisors).length
-        complete = supervisorsCompleted
-      } else {
-        required = persNum
-        complete = tngCompleted.length
-      }
-
-      // set the chart up here
-      let compliance = Math.round(100 * complete / required)
-      unitCell.innerHTML = compliance + '%<br>' + complete + '/' + required
-      if(isNaN(compliance)) {
-        unitCell.innerHTML = ''
-        unitCell.bgColor = 'black'
-        unitCell.style.color = 'black'
-      } else if(compliance < 70) {
-        unitCell.bgColor = 'red'
-        unitCell.style.color = 'white'
-      } else if (compliance < 80) {
-        unitCell.bgColor = 'yellow'
-        unitCell.style.color = 'black'
-      } else {
-        unitCell.bgColor = 'green'
-        unitCell.style.color = 'black'
-      } 
-      unitCell.setAttribute('data-unit',unit)
-      unitCell.setAttribute('data-tng',tngEntry['TaskNumber'])
-      unitCell.onclick = tngListClickHandler
-    })
-  })
-  complianceTable.appendChild(complianceTableBody)
-}
-
-function genLastNameLast4Keys (keyArray, persRecord) {
-  keyArray.push(persRecord['LastName'] + '|' + persRecord['Last4'])
-  return keyArray
-}
-
-function unitListClickHandler (e) {
-  let unit = e.srcElement.getAttribute('data-unit')
-  //e.srcElement.bgColor = 'orange'
-  //e.srcElement.style.color = 'black'
-  displayPersonnelCompliance(unit)
-}
-
-function tngListClickHandler (e) {
-  let unit = e.srcElement.getAttribute('data-unit')
-  let tng = e.srcElement.getAttribute('data-tng')
-  //e.srcElement.bgColor = 'orange'
-  //e.srcElement.style.color = 'black'
-  showTngList(tng, unit)
-}
-
-function showTngList (tng, unit) {
-  // retrieve records for a unit for a tng
-  let personRecords = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
-
-  let tngToTrackRecord = dtmsTngToTrack.filter(getTngToTrackRecord,{ tng: tng })
-  let audience = tngToTrackRecord[0]['Audience']
-  if (audience === 'All') {
-    personRecords = personRecords
-  } else if (audience === 'Soldiers') {
-    personRecords = personRecords.filter(getSoldiers)
-  } else if (audience === 'Civilians') {
-    personRecords = personRecords.filter(getDACivilians)
-  } else if (audience === 'Supervisors') {
-    personRecords = personRecords.filter(getSupervisors)
-  } else {
-    personRecords = personRecords
-  }
-  let frequency = tngToTrackRecord[0]['Frequency']
-  let dayValue = luxon.DateTime.local()
-
-  let personTable = document.getElementById('personTable')
-
-  // remove the current table
-  while(personTable.hasChildNodes()) {
-     personTable.removeChild(personTable.firstChild);
-  }
-  let header = personTable.createTHead()
-  let headerRow = header.insertRow(-1)
-  let rankHeaderCell = headerRow.insertCell(-1)
-  rankHeaderCell.innerHTML = 'Rank'
-  let nameHeaderCell = headerRow.insertCell(-1)
-  nameHeaderCell.innerHTML = 'Name'
-  let tngHeaderCell = headerRow.insertCell(-1)
-  tngHeaderCell.innerHTML = 'Task Number'
-  let tngDateHeaderCell = headerRow.insertCell(-1)
-  tngDateHeaderCell.innerHTML = 'Date Trained'
-  let personTableBody = document.createElement('tbody')
-  personRecords.forEach(function(person) {
-
-    //let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tng
-    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng
-    completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash })
-
-    let personRow = personTableBody.insertRow(-1)
-    let personRankCell = personRow.insertCell(-1)
-    let personNameCell = personRow.insertCell(-1)
-    let personTngCell = personRow.insertCell(-1)
-    let personTngDateCell = personRow.insertCell(-1)
-    personRankCell.innerHTML = person.RankShort
-    personNameCell.innerHTML = person.LastName
-    if (completedTngRecord.length > 0) {
-      personTngCell.innerHTML = completedTngRecord[0].TaskNumber
-      personTngDateCell.innerHTML = completedTngRecord[0].parsedLastDateTrained.toFormat('MM/dd/yyyy')
-      if (completedTngRecord[0].parsedLastDateTrained.plus({ days: frequency }) < dayValue) {
-        personRow.bgColor = 'red'
-        personRow.style.color = 'white'
-      }
-    } else {
-      personTngDateCell.innerHTML = ''
-      personTngCell.innerHTML = ''
-      personRow.bgColor = 'red'
-      personRow.style.color = 'white'
-    }
-  })
-  personTable.appendChild(personTableBody)
-
-  $("#personTable").tablesorter({
-    theme: 'bootstrap',
-    sortReset: true,
-    sortRestart: true,
-  })
-  $("#personTable").trigger("updateAll")
-}
-
-function displayPersonnelCompliance (unit) {
-  
-  // loop through all the personnel
-  let personTable = document.getElementById('personTable')
-  // remove the current table
-  while(personTable.hasChildNodes()) {
-     personTable.removeChild(personTable.firstChild);
-  }
-
-  // given a unit, display the people in that unit and when they completed the tracked training, display 'red' background if they do not have a training record
-  let persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit })
-
-  // setup the header, get the trainings that need to be displayed
-  let header = personTable.createTHead()
-  let headerRowName = header.insertRow(-1)
-  let headerRowNumber = header.insertRow(-1)
-  let headerCellName = headerRowName.insertCell(-1)
-  let headerCellNumber = headerRowNumber.insertCell(-1)
-  headerCellName = headerRowName.insertCell(-1)
-  headerCellNumber = headerRowNumber.insertCell(-1)
-  headerCellName.innerHTML = 'Task Name'
-  headerCellNumber.innerHTML = 'Task Number'
-  dtmsTngToTrack.forEach(function(tngEntry) {
-    headerCellName = headerRowName.insertCell(-1)
-    headerCellName.innerHTML = tngEntry['TaskName']
-    headerCellNumber = headerRowNumber.insertCell(-1)
-    headerCellNumber.innerHTML = tngEntry['TaskNumber']
-  })
-
-  let unitTableBody = document.createElement('tbody')
-  let personRow = ''
-  persList.forEach(function(person) {
-    // show the training dates for a person
-    personRow = generatePersonTrainingRow(person)
-    unitTableBody.appendChild(personRow)
-  })
-  personTable.appendChild(unitTableBody)
-  $("#personTable").tablesorter({
-    theme: 'bootstrap',
-    sortReset: true,
-    sortRestart: true,
-  })
-  $("#personTable").trigger("updateAll")
-}
-
-function generatePersonTrainingRow (person) {
-  let persHeaderRow = document.createElement('tr')
-  let dateData = ''
-
-  let persHeaderCell = persHeaderRow.insertCell(-1)
-  persHeaderCell.innerHTML = person['RankShort']
-  persHeaderCell = persHeaderRow.insertCell(-1)
-  persHeaderCell.innerHTML = person['LastName']
-
-  dtmsTngToTrack.forEach(function(tngToTrack) {
-    personCell = persHeaderRow.insertCell(-1)
-    //let personHash = person['LastName'] + "|" + person['Last4'] + "|" + tngToTrack['TaskNumber']
-    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng
-    completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash })
-    if (completedTngRecord.length > 0) {
-      // parse the date and then show the box 
-      // green - good to go
-      // yellow - will expire in the next 30 days
-      // red - expired or no record found
-      let tngDate = completedTngRecord[0]['parsedLastDateTrained']
-      let curDate = new DateTime.local()
-      let expDate = tngDate.plus({ days: parseInt(tngToTrack['Frequency']) })
-      let tngDuration = expDate.diff(curDate, 'days')
-      personCell.innerHTML = tngDate.toFormat('MM/dd/yyyy') 
-      personCell.innerHTML += ' (' + Math.round(tngDuration.get('days')) + ')'
-      if (tngDuration.get('days') > 30) {
-      // tng is valid for more than 30 days, bg should be green
-        personCell.bgColor = 'green'
-        personCell.style.color = 'black'
-      } else if (tngDuration.get('days') > 0) {
-        personCell.bgColor = 'yellow'
-        personCell.style.color = 'black'
-      } else {
-        personCell.bgColor = 'red'
-        personCell.style.color = 'white'
-      }
-    }
-    if (personCell.innerHTML === '') {
-      personCell.bgColor = 'red'
-    }
-  })
-  return persHeaderRow
-}
-
-function dedupTngRecords (tngRecord) {
-  // filter the array for the values to get distinct values for:
-  // LastName, Last4, TaskNumber
-  let key = tngRecord['LastName'] + "|" + tngRecord['Last4'] + "|" + tngRecord['TaskNumber']
-  if (!this[key]) {
-    this[key] = true
-    return true
-  }
-}
-
-function getTngForList (tngRecord) {
-  if (this.persKeyArray.includes(tngRecord['LastName'] + "|" + tngRecord['Last4'])) {
-    return this['TaskNumber'] === tngRecord['TaskNumber']
-  }
-}
-
-function getPersonTngRecord (tngRecord) {
-  let tngHash = tngRecord['RankShort'] + "|" + tngRecord['FirstName'] + "|" + tngRecord['LastName'] + "|" + tngRecord['TaskNumber']
-  return (this.personHash === tngHash)
-}
-
-function getUnits (persRecord) {
-  if (persRecord['UnitAttached'] !== undefined && persRecord['UnitAttached'].length > 0) {
-    return persRecord['UnitAttached'] 
-  } else {
-    return persRecord['UnitAssigned'] 
-  }
-}
-
-function getPeopleInUnit (persRecord) {
-  // check to see if the unit selector is set to 'All', if yes then send back every record
-  if (this.unit === 'All') {
-    return true
-  }
-  // check to see if the soldier is attached to the unit, if attached to a unit, then he should not be listed on the 'assigned' roster
-  if (persRecord['UnitAttached'] !== undefined && persRecord['UnitAttached'].length > 0) {
-    return persRecord['UnitAttached'] === this.unit
-  } else {
-    return persRecord['UnitAssigned'] === this.unit
-  }
-}
-
-function getUniqueValues (valueArray, valueRecord) {
-  if (!valueArray.includes(valueRecord)) {
-    valueArray.push(valueRecord)
-  }
-  return valueArray
-}
-
-// sort by the date column descending (newest value on the top)
-function sortByDateDesc (sort_file) {
-  // sort by the unit
-  sort_file.sort( function(a, b) {
-    if (a.parsedLastDateTrained.valueOf() > b.parsedLastDateTrained.valueOf()) { 
-      return -1
-    } else if (a.parsedLastDateTrained.valueOf() < b.parsedLastDateTrained.valueOf()) { 
-      return 1 
-    } else {
-      return 0
-    }
-  })
-  return sort_file
-}
-
-function sortByUnit (sort_file) {
-  // sort by the unit
-  sort_file.sort( function(a, b) {
-    return (a.unit.localeCompare(b.unit))
-  })
-  return sort_file
-}
-
-function getDACivilians (record) {
-  return record['RankShort'].indexOf('GS') >= 0
-}
-
-function getSoldiers (record) {
-  return record['RankShort'].indexOf('GS') === -1
-}
-
-// get the supervisors -> will be MAJ and GS13 at this time
-function getSupervisors (persRecord) {
-  return (persRecord['RankShort'] === 'MAJ' || persRecord['RankShort'] === 'GS13')
-}
-
-function checkTngValid (tngRecord) {
-  return tngRecord['parsedLastDateTrained'].plus({ days: this.frequency }) >= this.dayValue
-}
-
-function getTngToTrackRecord (tngToTrack) {
-  return tngToTrack['TaskNumber'] === this.tng
-}
+  });
+  $("#complianceTable").trigger("updateAll");
+});
 </script>
 </body>
 </html>
