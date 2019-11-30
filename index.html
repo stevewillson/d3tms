@@ -348,7 +348,7 @@ function generatePersonTrainingRow (person) {
 
   dtmsTngToTrack.forEach(function(tngToTrack) {
     personCell = persHeaderRow.insertCell(-1);
-    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng;
+    let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tngToTrack['TaskNumber'];
     completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash });
     if (completedTngRecord.length > 0) {
       // parse the date and then show the box 
