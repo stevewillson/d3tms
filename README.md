@@ -2,7 +2,7 @@
 
 ## Quickly provide a summary of unit compliance with mandated training. This will summarize the information stored in DTMS.
 
-1. Visit DTMS, 
+1. Visit [DTMS](https://dtms.army.mil/DTMS/Default.aspx)
 2. Select "Reporting" > "Report Center" > "Report List"
 3. Select the "Grid Reports" tab and the "Task Completion Roster Report" and the "Soldier Roster Report"
 
