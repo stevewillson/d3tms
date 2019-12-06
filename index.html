@@ -47,17 +47,17 @@ var dtmsTngToTrack = [];
 
 // create the dtmsPersReport from the Xslx file
 // personnel report from DTMS
-$('#dtmsPersReportXslx').on('change', function(event) {
-  var dtmsPersReportFile = event.target.files[0];
-  var reader = new FileReader();
+$('#dtmsPersReportXslx').on('change', event => {
+  let dtmsPersReportFile = event.target.files[0];
+  let reader = new FileReader();
   reader.onload = function (e) {
-    var data = e.target.result;
-    var workbook = XLSX.read(data, {
+    let data = e.target.result;
+    let workbook = XLSX.read(data, {
       type: 'binary'
     });
     dtmsPersReport = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
   };
-  reader.onerror = function (ex) {
+  reader.onerror = ex => {
     console.log(ex);
   };
   reader.readAsBinaryString(dtmsPersReportFile);
@@ -65,7 +65,7 @@ $('#dtmsPersReportXslx').on('change', function(event) {
 
 // create the dtmsTngReport from the Xslx file
 // this contains training records
-$('#dtmsTngReportXslx').on('change', function(event) {
+$('#dtmsTngReportXslx').on('change', event => {
   var dtmsTngReportFile = event.target.files[0];
   var reader = new FileReader();
   reader.onload = function (e) {
@@ -78,7 +78,7 @@ $('#dtmsTngReportXslx').on('change', function(event) {
     // sort by date trained and remove duplicate person entries from the tng report
     // only interested in the latest date trained
 
-    dtmsTngReport.forEach(function(tngRecord) {
+    dtmsTngReport.forEach(tngRecord => {
       tngRecord['parsedLastDateTrained'] = DateTime.fromJSDate(tngRecord['LastDateTrained']);
     });
 
@@ -88,7 +88,7 @@ $('#dtmsTngReportXslx').on('change', function(event) {
     // deduplicate the training records by person and tasknumber
     dtmsTngReport = dtmsTngReport.filter(dedupTngRecords, []);
   };
-  reader.onerror = function (ex) {
+  reader.onerror = ex => {
     console.log(ex);
   };
   reader.readAsBinaryString(dtmsTngReportFile);
@@ -96,17 +96,17 @@ $('#dtmsTngReportXslx').on('change', function(event) {
 
 // create the dtmsTngToTrack from the Xslx file
 // list of trainings that will be displayed
-$('#dtmsTngToTrackXslx').on('change', function(event) {
+$('#dtmsTngToTrackXslx').on('change', event => {
   let dtmsTngToTrackFile = event.target.files[0];
   let reader = new FileReader();
-  reader.onload = function (e) {
+  reader.onload = e => {
     let data = e.target.result;
     let workbook = XLSX.read(data, {
       type: 'binary'
     });
     dtmsTngToTrack = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
   }
-  reader.onerror = function (ex) {
+  reader.onerror = ex => {
     console.log(ex);
   }
   reader.readAsBinaryString(dtmsTngToTrackFile);
@@ -130,7 +130,7 @@ function generate350_1Table () {
   var headerCellNumber = headerRowNumber.insertCell(-1);
   headerCellName.innerHTML = 'Task Name';
   headerCellNumber.innerHTML = 'Task Number';
-  dtmsTngToTrack.forEach(function(tngEntry) {
+  dtmsTngToTrack.forEach(tngEntry => {
     headerCellName = headerRowName.insertCell(-1);
     headerCellName.innerHTML = tngEntry['TaskName'];
     headerCellNumber = headerRowNumber.insertCell(-1);
@@ -147,7 +147,7 @@ function generate350_1Table () {
   // add 'All' value at the end
   dtmsUnitArray.push('All');
 
-  dtmsUnitArray.forEach(function(unit) {
+  dtmsUnitArray.forEach(unit => {
     let unitRow = complianceTableBody.insertRow(-1);
     let unitCell = unitRow.insertCell(-1);
     unitCell.innerHTML = unit;
@@ -155,7 +155,7 @@ function generate350_1Table () {
     unitCell.onclick = unitListClickHandler;
 
     // iterate through the tracked trainings training entries
-    dtmsTngToTrack.forEach(function(tngEntry) {
+    dtmsTngToTrack.forEach(tngEntry => {
 
       unitCell = unitRow.insertCell(-1);
       // get the people for that unit that should complete the training
@@ -257,7 +257,7 @@ function showTngList (tng, unit) {
   let tngDateHeaderCell = headerRow.insertCell(-1);
   tngDateHeaderCell.innerHTML = 'Date Trained';
   let personTableBody = document.createElement('tbody');
-  personRecords.forEach(function(person) {
+  personRecords.forEach(person => {
 
     let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tng;
     completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash });
@@ -314,7 +314,7 @@ function displayPersonnelCompliance (unit) {
   headerCellNumber = headerRowNumber.insertCell(-1);
   headerCellName.innerHTML = 'Task Name';
   headerCellNumber.innerHTML = 'Task Number';
-  dtmsTngToTrack.forEach(function(tngEntry) {
+  dtmsTngToTrack.forEach(tngEntry => {
     headerCellName = headerRowName.insertCell(-1);
     headerCellName.innerHTML = tngEntry['TaskName'];
     headerCellNumber = headerRowNumber.insertCell(-1);
@@ -323,7 +323,7 @@ function displayPersonnelCompliance (unit) {
 
   let unitTableBody = document.createElement('tbody');
   let personRow = '';
-  persList.forEach(function(person) {
+  persList.forEach(person => {
     // show the training dates for a person
     personRow = generatePersonTrainingRow(person);
     unitTableBody.appendChild(personRow);
@@ -346,7 +346,7 @@ function generatePersonTrainingRow (person) {
   persHeaderCell = persHeaderRow.insertCell(-1);
   persHeaderCell.innerHTML = person['LastName'];
 
-  dtmsTngToTrack.forEach(function(tngToTrack) {
+  dtmsTngToTrack.forEach(tngToTrack => {
     personCell = persHeaderRow.insertCell(-1);
     let personHash = person['RankShort'] + "|" + person['FirstName'] + "|" + person['LastName'] + "|" + tngToTrack['TaskNumber'];
     completedTngRecord = dtmsTngReport.filter(getPersonTngRecord,{ personHash: personHash });
@@ -434,7 +434,7 @@ function getUniqueValues (valueArray, valueRecord) {
 // sort by the date column descending (newest value on the top)
 function sortByDateDesc (sort_file) {
   // sort by the unit
-  sort_file.sort( function(a, b) {
+  sort_file.sort((a, b) => {
     if (a.parsedLastDateTrained.valueOf() > b.parsedLastDateTrained.valueOf()) { 
       return -1;
     } else if (a.parsedLastDateTrained.valueOf() < b.parsedLastDateTrained.valueOf()) { 
@@ -481,34 +481,30 @@ function genPersonHashArray (keyArray, persRecord) {
 
 function unitListClickHandler (e) {
   let unit = e.srcElement.getAttribute('data-unit');
-  //e.srcElement.bgColor = 'orange';
-  //e.srcElement.style.color = 'black';
   displayPersonnelCompliance(unit);
 };
 
 function tngListClickHandler (e) {
   let unit = e.srcElement.getAttribute('data-unit');
   let tng = e.srcElement.getAttribute('data-tng');
-  //e.srcElement.bgColor = 'orange';
-  //e.srcElement.style.color = 'black';
   showTngList(tng, unit);
 };
 
 // display a personnel bar chart by unit
-$('#displayUnitSize').on('click', function () {
+$('#displayUnitSize').on('click', () => {
   let dtmsUnitArray = dtmsPersReport.map(getUnits)
     .reduce(getUniqueValues,[])
     .sort();
   let unitSize = [];
   let persList = [];
-  dtmsUnitArray.forEach(function (unit) {
+  dtmsUnitArray.forEach(unit => {
     persList = dtmsPersReport.filter(getPeopleInUnit,{ unit: unit });
     unitSize.push({ unit: unit, persCount: persList.length });
   });
 
   // set the max of the domain to be the most people that are in a unit
   // get the max number of people in a unit
-  let maxSize = unitSize.map((unit) => { return unit.persCount })
+  let maxSize = unitSize.map(unit => unit.persCount)
     .reduce(getMaxOfArray);
 
   var scale = d3.scaleLinear()
@@ -520,11 +516,11 @@ $('#displayUnitSize').on('click', function () {
     .data(unitSize)
       .enter()
       .append("div")
-      .style("width", function(d) { return scale(d.persCount) + 'px' })
-      .text(function(d) { return d.unit + " Personnel: " + d.persCount });
+      .style("width", d => { return scale(d.persCount) + 'px' })
+      .text(d => { return d.unit + " Personnel: " + d.persCount });
 });
 
-$('#display350_1Compliance').on('click', function () {
+$('#display350_1Compliance').on('click', () => {
   // build the html table to show the training data
   generate350_1Table();
 
